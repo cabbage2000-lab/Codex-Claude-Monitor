@@ -2,7 +2,12 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
 
-const { formatAgentUsage, readLatestAgentUsage } = require("../src/agentUsage");
+const {
+  formatAgentUsage,
+  formatRateLimits,
+  getUsageSeverity,
+  readLatestAgentUsage,
+} = require("../src/agentUsage");
 const { makeTempDir, setMtime, writeJsonl } = require("./testUtils");
 
 test("readLatestAgentUsage selects Codex when Codex session is newer", () => {
@@ -42,6 +47,25 @@ test("readLatestAgentUsage selects Codex when Codex session is newer", () => {
   assert.equal(usage.provider, "Codex");
   assert.equal(formatted.text, "Codex 3%");
   assert.equal(formatted.tooltip, "Codex: Context 8k / 258k (3%)");
+  assert.equal(formatted.severity, "low");
+});
+
+test("getUsageSeverity maps percent to low/medium/high thresholds", () => {
+  assert.equal(getUsageSeverity(0), "low");
+  assert.equal(getUsageSeverity(49), "low");
+  assert.equal(getUsageSeverity(50), "medium");
+  assert.equal(getUsageSeverity(79), "medium");
+  assert.equal(getUsageSeverity(80), "high");
+  assert.equal(getUsageSeverity(100), "high");
+});
+
+test("getUsageSeverity returns null for non-finite values", () => {
+  assert.equal(getUsageSeverity(NaN), null);
+  assert.equal(getUsageSeverity(undefined), null);
+});
+
+test("formatAgentUsage returns null severity when usage is missing", () => {
+  assert.equal(formatAgentUsage(null).severity, null);
 });
 
 test("readLatestAgentUsage selects Claude when Claude session is newer", () => {
@@ -80,5 +104,101 @@ test("readLatestAgentUsage selects Claude when Claude session is newer", () => {
 
   assert.equal(usage.provider, "Claude");
   assert.equal(formatted.text, "Claude 18%");
-  assert.equal(formatted.tooltip, "Claude: Context 185k / 1m (18%)");
+  assert.equal(
+    formatted.tooltip,
+    ["Claude: Context 185k / 1m (18%)", "模型: claude-opus-4-8"].join("\n"),
+  );
+  assert.equal(formatted.severity, "low");
+});
+
+test("formatRateLimits formats 5h and weekly windows with reset times", () => {
+  // 本地时间构造，保证跨时区确定性。
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+  const sameDayReset = Math.floor(new Date(2026, 5, 3, 14, 32).getTime() / 1000);
+  const nextWeekReset = Math.floor(new Date(2026, 5, 8, 9, 24).getTime() / 1000);
+
+  const lines = formatRateLimits(
+    {
+      primary: { used_percent: 21.0, window_minutes: 300, resets_at: sameDayReset },
+      secondary: { used_percent: 10.0, window_minutes: 10080, resets_at: nextWeekReset },
+    },
+    now,
+  );
+
+  assert.deepEqual(lines, [
+    "5h 用量: 21% · 重置于 14:32",
+    "周用量: 10% · 重置于 6/8 09:24",
+  ]);
+});
+
+test("formatRateLimits omits invalid windows and missing reset times", () => {
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+
+  assert.deepEqual(formatRateLimits(null, now), []);
+  assert.deepEqual(formatRateLimits({}, now), []);
+  // 缺 used_percent → 跳过整行。
+  assert.deepEqual(
+    formatRateLimits({ primary: { window_minutes: 300, resets_at: 1780492366 } }, now),
+    [],
+  );
+  // 缺 window_minutes → 跳过整行。
+  assert.deepEqual(formatRateLimits({ primary: { used_percent: 21 } }, now), []);
+  // 缺 resets_at → 省略重置时间部分。
+  assert.deepEqual(
+    formatRateLimits({ primary: { used_percent: 21, window_minutes: 300 } }, now),
+    ["5h 用量: 21%"],
+  );
+});
+
+test("formatRateLimits falls back to day label for mid-length windows", () => {
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+  const lines = formatRateLimits(
+    { primary: { used_percent: 55.6, window_minutes: 2880 } },
+    now,
+  );
+  assert.deepEqual(lines, ["2d 用量: 56%"]);
+});
+
+test("formatAgentUsage renders multi-line tooltip with Codex rate limits", () => {
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+  const sameDayReset = Math.floor(new Date(2026, 5, 3, 14, 32).getTime() / 1000);
+  const nextWeekReset = Math.floor(new Date(2026, 5, 8, 9, 24).getTime() / 1000);
+
+  const formatted = formatAgentUsage(
+    {
+      provider: "Codex",
+      contextTokens: 8200,
+      contextWindow: 258400,
+      contextPercent: 3,
+      rateLimits: {
+        primary: { used_percent: 21.0, window_minutes: 300, resets_at: sameDayReset },
+        secondary: { used_percent: 10.0, window_minutes: 10080, resets_at: nextWeekReset },
+      },
+    },
+    now,
+  );
+
+  assert.equal(
+    formatted.tooltip,
+    [
+      "Codex: Context 8k / 258k (3%)",
+      "5h 用量: 21% · 重置于 14:32",
+      "周用量: 10% · 重置于 6/8 09:24",
+    ].join("\n"),
+  );
+});
+
+test("formatAgentUsage appends model line for Claude usage", () => {
+  const formatted = formatAgentUsage({
+    provider: "Claude",
+    model: "claude-opus-4-8",
+    contextTokens: 185000,
+    contextWindow: 1000000,
+    contextPercent: 18,
+  });
+
+  assert.equal(
+    formatted.tooltip,
+    ["Claude: Context 185k / 1m (18%)", "模型: claude-opus-4-8"].join("\n"),
+  );
 });

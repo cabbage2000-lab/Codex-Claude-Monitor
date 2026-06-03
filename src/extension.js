@@ -9,6 +9,13 @@ const { getDefaultClaudeRoot } = require("./claudeUsage");
 // 配置变更时需要触发刷新的设置项（不含 agentTokenStatus. 前缀）。
 const WATCHED_SETTINGS = ["sessionsRoot", "claudeRoot", "refreshIntervalMs"];
 
+// 用量等级 → 状态栏文字颜色（主题色，自动适配深浅主题）。
+const SEVERITY_COLORS = {
+  low: new vscode.ThemeColor("charts.green"),
+  medium: new vscode.ThemeColor("charts.yellow"),
+  high: new vscode.ThemeColor("charts.red"),
+};
+
 let statusItem;
 let refreshTimer;
 
@@ -34,7 +41,7 @@ function getWorkspaceFolders() {
 
 function refreshStatus() {
   if (!statusItem) {
-    return;
+    return null;
   }
 
   try {
@@ -46,11 +53,15 @@ function refreshStatus() {
     const formatted = formatAgentUsage(usage);
     statusItem.text = formatted.text;
     statusItem.tooltip = formatted.tooltip;
+    statusItem.color = SEVERITY_COLORS[formatted.severity] || undefined;
     statusItem.show();
+    return formatted;
   } catch (error) {
     statusItem.text = "$(pulse) Agent tokens: error";
     statusItem.tooltip = `Agent Token Status failed to read usage.\n${error.message}`;
+    statusItem.color = undefined;
     statusItem.show();
+    return null;
   }
 }
 
@@ -68,8 +79,11 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("agentTokenStatus.refresh", () => {
-      refreshStatus();
-      vscode.window.showInformationMessage("Agent token status refreshed.");
+      const formatted = refreshStatus();
+      const message = formatted
+        ? formatted.tooltip.split("\n").join(" · ")
+        : "Agent Token Status failed to read usage.";
+      vscode.window.showInformationMessage(message);
     }),
   );
 
