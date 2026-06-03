@@ -1,8 +1,8 @@
 const { readLatestUsage: readLatestCodexUsage } = require("./codexUsage");
 const { readLatestClaudeUsage } = require("./claudeUsage");
 
-// 每个 provider 返回统一结构：{ provider, sessionFile, updatedAt, contextTokens,
-// contextWindow, contextPercent, ... }。新增 provider 时在 candidates 里追加一项即可。
+// Each provider returns the same shape: { provider, sessionFile, updatedAt, contextTokens,
+// contextWindow, contextPercent, ... }. Add new providers to candidates.
 function readLatestAgentUsage(options = {}) {
   const workspaceFolders = options.workspaceFolders || [];
   const candidates = [
@@ -30,7 +30,7 @@ function formatCount(value) {
   return String(value);
 }
 
-// 用量等级：<50% → "low"，50–79% → "medium"，≥80% → "high"；无有效百分比 → null。
+// Usage severity: <50% is low, 50-79% is medium, >=80% is high; invalid percentages return null.
 function getUsageSeverity(contextPercent) {
   if (!Number.isFinite(contextPercent)) {
     return null;
@@ -48,7 +48,7 @@ function pad2(value) {
   return String(value).padStart(2, "0");
 }
 
-// resets_at（unix 秒）→ 与 now 同一天显示 "HH:mm"，跨天显示 "M/D HH:mm"。
+// Convert resets_at in Unix seconds. Same day uses "HH:mm"; other days use "M/D HH:mm".
 function formatResetTime(resetsAtSeconds, now) {
   if (!Number.isFinite(resetsAtSeconds)) {
     return null;
@@ -63,7 +63,7 @@ function formatResetTime(resetsAtSeconds, now) {
   return sameDay ? time : `${resetDate.getMonth() + 1}/${resetDate.getDate()} ${time}`;
 }
 
-// 单个限额窗口 → 展示行；缺 used_percent / window_minutes 时返回 null（省略该行）。
+// Convert one rate-limit window into a display row. Missing fields omit the row.
 function formatRateLimitWindow(limitWindow, now) {
   if (
     !limitWindow ||
@@ -75,18 +75,18 @@ function formatRateLimitWindow(limitWindow, now) {
   const minutes = limitWindow.window_minutes;
   let label;
   if (minutes >= 7 * 24 * 60) {
-    label = "周用量";
+    label = "Weekly usage";
   } else if (minutes <= 24 * 60) {
-    label = `${Math.round(minutes / 60)}h 用量`;
+    label = `${Math.round(minutes / 60)}h usage`;
   } else {
-    label = `${Math.round(minutes / (24 * 60))}d 用量`;
+    label = `${Math.round(minutes / (24 * 60))}d usage`;
   }
   const percent = `${Math.round(limitWindow.used_percent)}%`;
   const reset = formatResetTime(limitWindow.resets_at, now);
-  return reset ? `${label}: ${percent} · 重置于 ${reset}` : `${label}: ${percent}`;
+  return reset ? `${label}: ${percent} · Reset at ${reset}` : `${label}: ${percent}`;
 }
 
-// Codex rate_limits（primary=5h 窗口，secondary=周窗口）→ tooltip 展示行数组。
+// Convert Codex rate_limits into tooltip rows. primary is usually 5h; secondary is weekly.
 function formatRateLimits(rateLimits, now = Date.now()) {
   if (!rateLimits) {
     return [];
@@ -111,7 +111,7 @@ function formatAgentUsage(usage, now = Date.now()) {
     `${provider}: Context ${formatCount(usage.contextTokens)} / ${formatCount(usage.contextWindow)} (${contextPercent})`,
   ];
   if (usage.model) {
-    lines.push(`模型: ${usage.model}`);
+    lines.push(`Model: ${usage.model}`);
   }
   lines.push(...formatRateLimits(usage.rateLimits, now));
 

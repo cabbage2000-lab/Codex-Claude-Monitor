@@ -50,8 +50,9 @@ function readFirstLine(sessionFile, maxBytes = 1024 * 1024) {
   }
 }
 
-// session_meta 是会话创建时写入的第一行且不会再变化，按文件路径缓存，
-// 避免每次刷新都重读候选文件首行。只缓存命中结果，防止刚创建尚未写入首行的文件被永久判空。
+// session_meta is written as the first line when the session is created and does not change.
+// Cache successful cwd reads by file path so refreshes do not reread unchanged candidate files.
+// Only cache matches so newly created files without a first line are not permanently treated as empty.
 const sessionCwdCache = new Map();
 
 function readSessionCwd(sessionFile) {

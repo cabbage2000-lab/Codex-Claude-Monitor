@@ -1,0 +1,7 @@
+# 开发资产，不打进 .vsix
+.claude/**
+.gitignore
+CLAUDE.md
+docs/**
+test/**
+**/.DS_Store

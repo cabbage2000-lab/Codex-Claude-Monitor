@@ -1,66 +1,78 @@
-# Agent Token Status
+# Context Meter
 
-一个本地 VS Code 扩展，用来在状态栏显示 Codex 或 Claude Code 当前会话的 token 和上下文使用情况。
+Context Meter is a VS Code extension that tracks context usage for the current Codex or Claude Code session in the status bar.
 
-扩展会同时检查 Codex 与 Claude Code 的本地 session 文件。哪个 session 文件最近更新，就显示哪个工具的上下文占用。
+The extension checks local session files for both Codex and Claude Code. It displays the tool whose session file was updated most recently.
 
-## 显示内容
+## Display
 
-状态栏会显示类似下面的内容：
+The status bar shows compact text like:
 
 ```text
 Codex 13%
 Claude 18%
 ```
 
-- 状态栏只显示来源和上下文占用百分比，尽量减少干扰。
-- 只统计工作目录落在当前 VS Code workspace 内的会话；在其他目录开的 CLI 会话不会被显示。没有打开文件夹（空窗口）时不过滤，显示全局最新会话。
-- Codex 的百分比来自最近一次请求的 `input_tokens / model_context_window`。
-- Claude Code 的百分比来自最近一次 assistant usage 的 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`，再除以推断出的上下文窗口。
-- 鼠标悬停在状态栏项上，可以看到一行 context 明细，例如 `Codex: Context 136k / 258k (53%)` 或 `Claude: Context 185k / 1m (18%)`。
+- The status bar only shows the provider and context usage percentage to stay unobtrusive.
+- Only sessions whose working directory is inside the current VS Code workspace are counted. CLI sessions from other directories are ignored. Empty windows do not filter by workspace and show the latest global session.
+- Codex percentages come from `input_tokens / model_context_window` for the latest request.
+- Claude Code percentages come from `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, divided by the inferred context window.
+- Hover the status bar item to see more detail. Codex shows 5-hour and weekly usage with reset times; Claude shows the model name:
 
-## 本地安装
+  ```text
+  Codex: Context 136k / 258k (53%)
+  5h usage: 21% · Reset at 14:32
+  Weekly usage: 10% · Reset at 6/8 09:24
+  ```
 
-把这个目录链接到 VS Code 的扩展目录：
+- Click the status bar item to refresh immediately. Detailed usage remains available from the hover tooltip.
+
+## Local Installation
+
+Link this directory into the VS Code extensions directory:
 
 ```bash
-ln -s /Users/blingabc/PycharmProjects/agent-token-status ~/.vscode/extensions/agent-token-status
+ln -s /path/to/context-meter ~/.vscode/extensions/context-meter
 ```
 
-然后在 VS Code 命令面板执行：
+Then run this command from the VS Code command palette:
 
 ```text
 Developer: Reload Window
 ```
 
-重载后，状态栏右侧会出现 Codex 或 Claude Code token 使用情况。也可以在命令面板执行：
+After reload, Codex or Claude Code token usage appears on the right side of the status bar. You can also run:
 
 ```text
-Agent Token Status: Refresh
+Context Meter: Refresh
 ```
 
-手动刷新一次。
+to refresh manually.
 
-## 设置项
+## Settings
 
-- `agentTokenStatus.sessionsRoot`：可选的 Codex sessions 目录。默认读取 `~/.codex/sessions`。
-- `agentTokenStatus.claudeRoot`：可选的 Claude Code home 目录。默认读取 `~/.claude`。
-- `agentTokenStatus.refreshIntervalMs`：自动刷新间隔，默认 `5000` 毫秒。
+- `agentTokenStatus.sessionsRoot`: optional Codex sessions directory. Defaults to `~/.codex/sessions`.
+- `agentTokenStatus.claudeRoot`: optional Claude Code home directory. Defaults to `~/.claude`.
+- `agentTokenStatus.refreshIntervalMs`: automatic refresh interval. Defaults to `5000` milliseconds.
 
-## 数据来源
+## Data Sources
 
-扩展会读取 Codex 生成的 session JSONL 文件，路径通常在：
+The extension reads Codex session JSONL files, usually under:
 
 ```text
 ~/.codex/sessions
 ```
 
-它会从最新的 `rollout-*.jsonl` 文件中读取最后一个 `token_count` 事件。
+It reads the last `token_count` event from the latest `rollout-*.jsonl` file.
 
-扩展也会读取 Claude Code 生成的 session JSONL 文件，路径通常在：
+The extension also reads Claude Code session JSONL files, usually under:
 
 ```text
 ~/.claude/projects
 ```
 
-它会从最新的 Claude Code session 文件中读取最后一条 assistant `message.usage`。
+It reads the last assistant `message.usage` entry from the latest Claude Code session file.
+
+## Privacy
+
+The extension **only reads local session files**. It does not make network requests, upload data, or collect data.

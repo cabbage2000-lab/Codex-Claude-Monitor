@@ -2,36 +2,36 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 项目概述
+## Project Overview
 
-本地 VS Code 扩展（不发布到市场），在状态栏显示 Codex 或 Claude Code 当前会话的 token/上下文使用百分比。纯 CommonJS，无构建步骤、无依赖（仅用 Node 内置模块和 `vscode` API）。
+This is a local VS Code extension, not intended for marketplace publishing. It shows token/context usage percentages for the current Codex or Claude Code session in the status bar. The project is plain CommonJS with no build step and no dependencies beyond Node built-ins and the `vscode` API.
 
-## 常用命令
+## Commands
 
 ```bash
-# 运行所有测试（Node 内置 test runner，无需 npm install）
+# Run all tests with Node's built-in test runner. No npm install is required.
 npm test
 
-# 运行单个测试文件
+# Run one test file.
 node --test test/claudeUsage.test.js
 ```
 
-本地安装方式：把项目目录软链接到 `~/.vscode/extensions/agent-token-status`，然后在 VS Code 执行 `Developer: Reload Window`（见 README.md）。
+For local installation, symlink the project directory to `~/.vscode/extensions/context-meter`, then run `Developer: Reload Window` in VS Code. See `README.md`.
 
-## 架构
+## Architecture
 
-数据流：本地 session JSONL 文件 → 各 provider 解析模块（按 workspace 过滤）→ 聚合选最新 → 状态栏。
+Data flow: local session JSONL files -> provider parsers with workspace filtering -> latest active provider selection -> status bar.
 
-Workspace 过滤：`readLatestAgentUsage` 接受可选 `workspaceFolders`（绝对路径数组），只统计 cwd 落在 workspace 内（含子目录）的会话；空数组则不过滤。Claude 通过 munged 目录名（非字母数字字符替换为 `-`，前缀匹配）过滤，无需读文件；Codex 按 mtime 降序逐个读文件第一行的 `session_meta.payload.cwd` 判断，命中即停。设计文档见 `docs/specs/2026-06-03-workspace-filter-design.md`。
+Workspace filtering: `readLatestAgentUsage` accepts optional `workspaceFolders` as absolute paths. Only sessions whose cwd is inside a workspace folder, including subdirectories, are counted. Empty arrays disable filtering. Claude is filtered by munged directory names, where non-alphanumeric characters are replaced with `-` and prefix matching supports subdirectories, so files do not need to be opened. Codex candidates are sorted by descending mtime, then each first line is read until `session_meta.payload.cwd` matches. See `docs/specs/2026-06-03-workspace-filter-design.md`.
 
-- `src/sessionFiles.js` — provider 共享的工具层：递归扫描（`walkFiles`，传入文件名过滤函数）、mtime 降序排序、`parseJsonLine`、`calculateContextPercent`、`readLastMatchingEvent`（逐行解析 JSONL 取最后一条命中记录，按 mtime+size 缓存避免每次刷新重读未变化的文件）。
-- `src/codexUsage.js` — 递归扫描 `~/.codex/sessions` 下的 `rollout-*.jsonl`，取 mtime 最新的文件，读取最后一个 `token_count` 事件。百分比 = `last_token_usage.input_tokens / model_context_window`。
-- `src/claudeUsage.js` — 递归扫描 `~/.claude/projects` 下的 `.jsonl`，取最新文件，读取最后一条 `type: "assistant"` 且带 `message.usage` 的记录。上下文 token = `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`；上下文窗口由模型名推断（`inferClaudeContextWindow`：含 "1m" 或 claude-opus-4-7/4-8 → 1M，否则 200k）。
-- `src/agentUsage.js` — 聚合层：同时读取两个 provider，按 `updatedAt` 选最近活跃的一个，并格式化状态栏文本/tooltip（多行：上下文行 → 模型行 → rate limit 行；Codex 的 5h/周用量由 `formatRateLimits` 格式化）。
-- `src/extension.js` — VS Code 入口：唯一依赖 `vscode` API 的文件。负责状态栏项、定时刷新（默认 5s）、配置读取（`agentTokenStatus.sessionsRoot` / `claudeRoot` / `refreshIntervalMs`）和 `agentTokenStatus.refresh` 命令（点击状态栏项时刷新，并把 tooltip 多行内容以 ` · ` 拼接显示在信息提示中）。
+- `src/sessionFiles.js`: shared provider utility layer for recursive scanning with `walkFiles`, descending mtime sorting, `parseJsonLine`, `calculateContextPercent`, and `readLastMatchingEvent`, which parses JSONL line by line, returns the last matched entry, and caches by mtime plus size.
+- `src/codexUsage.js`: recursively scans `~/.codex/sessions` for `rollout-*.jsonl`, picks the newest file by mtime, and reads the last `token_count` event. Percentage = `last_token_usage.input_tokens / model_context_window`.
+- `src/claudeUsage.js`: recursively scans `~/.claude/projects` for `.jsonl`, picks the newest file, and reads the last `type: "assistant"` entry with `message.usage`. Context tokens = `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`; the context window is inferred from the model name by `inferClaudeContextWindow`: model names containing `1m` or `claude-opus-4-7` / `claude-opus-4-8` use 1M, otherwise 200k.
+- `src/agentUsage.js`: aggregation layer. It reads both providers, selects the most recently active one by `updatedAt`, and formats status bar text and tooltip text. Tooltip rows are ordered as context row, model row, then rate-limit rows. Codex 5-hour and weekly usage rows are formatted by `formatRateLimits`.
+- `src/extension.js`: VS Code entry point and the only file that depends on the `vscode` API. It owns the status bar item, refresh timer with default 5s interval, configuration reads for `agentTokenStatus.sessionsRoot`, `claudeRoot`, and `refreshIntervalMs`, and the `agentTokenStatus.refresh` command. Clicking the status bar item refreshes status only; detailed usage remains in the hover tooltip.
 
-Provider 契约：每个 provider 的 `readLatestXxxUsage(root, workspaceFolders)` 返回统一结构 `{ provider, sessionFile, updatedAt, contextTokens, contextWindow, contextPercent, ... }`（Codex 的 `updatedAt` 用文件 mtime，Claude 用消息 timestamp）。新增 provider 时实现该契约，并在 `agentUsage.js` 的 candidates 数组里追加一项；格式化只发生在聚合层（`formatAgentUsage` / `formatCount` / `formatRateLimits`）。
+Provider contract: every provider's `readLatestXxxUsage(root, workspaceFolders)` returns the unified shape `{ provider, sessionFile, updatedAt, contextTokens, contextWindow, contextPercent, ... }`. Codex uses file mtime for `updatedAt`; Claude uses message timestamp. To add a provider, implement this contract and append it to the candidates array in `agentUsage.js`. Formatting belongs only in the aggregation layer through `formatAgentUsage`, `formatCount`, and `formatRateLimits`.
 
-关键设计：解析逻辑（sessionFiles / codexUsage / claudeUsage / agentUsage）与 `vscode` API 完全解耦，因此可以直接用 Node test runner 测试，无需 VS Code 测试环境。测试通过 `test/testUtils.js`（`makeTempDir` / `writeJsonl` / `setMtime`）写临时 JSONL fixture 来验证解析与选择逻辑。
+Key design: parsing logic in `sessionFiles`, `codexUsage`, `claudeUsage`, and `agentUsage` is fully decoupled from the `vscode` API, so it can be tested directly with Node's built-in test runner without a VS Code test environment. Tests use `test/testUtils.js` helpers such as `makeTempDir`, `writeJsonl`, and `setMtime` to create temporary JSONL fixtures for parser and selection behavior.
 
-新增模型的上下文窗口支持时，修改 `claudeUsage.js` 的 `inferClaudeContextWindow`。
+When adding support for a new model context window, update `inferClaudeContextWindow` in `claudeUsage.js`.

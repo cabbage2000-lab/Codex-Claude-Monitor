@@ -1,43 +1,43 @@
-# Workspace 过滤设计
+# Workspace Filter Design
 
-日期：2026-06-03
+Date: 2026-06-03
 
-## 目标
+## Goal
 
-状态栏只显示工作目录（cwd）落在当前 VS Code workspace 内的 agent 会话，避免外部 CLI 在其他目录开的会话干扰显示。
+The status bar should only show agent sessions whose working directory (`cwd`) is inside the current VS Code workspace. This prevents CLI sessions opened from other directories from taking over the display.
 
-## 匹配规则
+## Matching Rules
 
-- session 的 cwd 等于某个 workspace 文件夹，或是其子目录（路径前缀匹配，按路径分隔符边界）即算匹配。
-- 多 root workspace：任一文件夹匹配即可。
+- A session matches when its `cwd` equals a workspace folder or is inside one of its subdirectories. Prefix matching must respect path separator boundaries.
+- Multi-root workspaces match when any workspace folder matches.
 
-## 实现
+## Implementation
 
-### 接口变化
+### Interface Change
 
-`readLatestAgentUsage({ codexSessionsRoot, claudeRoot, workspaceFolders })` 新增可选 `workspaceFolders`（绝对路径数组）：
+`readLatestAgentUsage({ codexSessionsRoot, claudeRoot, workspaceFolders })` accepts optional `workspaceFolders` as an array of absolute paths:
 
-- 不传 / 空数组 → 不过滤，保持现有全局行为。
-- 解析层（codexUsage / claudeUsage / agentUsage）继续不依赖 `vscode` API。
-- `extension.js` 从 `vscode.workspace.workspaceFolders` 取路径传入。
+- Missing or empty arrays mean no filtering and preserve the existing global behavior.
+- Parser layers (`codexUsage`, `claudeUsage`, and `agentUsage`) stay independent from the `vscode` API.
+- `extension.js` reads paths from `vscode.workspace.workspaceFolders` and passes them in.
 
-### Claude Code（claudeUsage.js）
+### Claude Code (`claudeUsage.js`)
 
-session 按 cwd 分目录存储于 `~/.claude/projects/<munged-cwd>/`（路径中非字母数字字符替换为 `-`）。把 workspace 路径做同样 munge，只扫描目录名等于 munged 路径或以 `<munged>-` 为前缀的 project 文件夹。无需读文件内容即可过滤。
+Claude stores sessions by cwd under `~/.claude/projects/<munged-cwd>/`, where non-alphanumeric characters in the path are replaced with `-`. Apply the same munging to each workspace path, then scan project directories whose name equals the munged path or starts with `<munged>-`. This filters without reading file contents.
 
-### Codex（codexUsage.js）
+### Codex (`codexUsage.js`)
 
-rollout 文件按日期目录存储，cwd 在文件第一行 `session_meta.payload.cwd`。候选文件按 mtime 降序排列后，逐个只读第一行解析 cwd，命中即停。
+Codex rollout files are stored in date directories, and the cwd is available in the first line at `session_meta.payload.cwd`. Sort candidate files by descending mtime, read only the first line of each candidate, and stop at the first match.
 
-## 边界情况
+## Edge Cases
 
-- 空窗口（无 workspace 文件夹）→ 不过滤，保持现状。
-- workspace 内无匹配 session → 显示现有 `n/a`。
-- session_meta 缺失或解析失败的 Codex 文件 → 视为不匹配（过滤模式下跳过）。
+- Empty VS Code windows with no workspace folder do not filter and keep the existing behavior.
+- Workspaces without a matching session display the existing `n/a` state.
+- Codex files with missing or unparsable `session_meta` are treated as non-matches while filtering.
 
-## 测试
+## Tests
 
-- cwd 在 workspace 内 / 外的过滤行为（Codex、Claude 各自）。
-- munged 目录名前缀匹配（含子目录会话）。
-- 多 root workspace 任一匹配。
-- 不传 workspaceFolders 时行为不变（已有用例回归）。
+- Codex and Claude sessions inside and outside a workspace.
+- Munged directory prefix matching for subdirectory sessions.
+- Multi-root workspace matching.
+- Existing global behavior when `workspaceFolders` is omitted.

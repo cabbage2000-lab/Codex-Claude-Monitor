@@ -6,10 +6,10 @@ const {
 const { getDefaultSessionsRoot } = require("./codexUsage");
 const { getDefaultClaudeRoot } = require("./claudeUsage");
 
-// 配置变更时需要触发刷新的设置项（不含 agentTokenStatus. 前缀）。
+// Settings that should trigger a refresh when changed, without the agentTokenStatus prefix.
 const WATCHED_SETTINGS = ["sessionsRoot", "claudeRoot", "refreshIntervalMs"];
 
-// 用量等级 → 状态栏文字颜色（主题色，自动适配深浅主题）。
+// Usage severity to status bar theme color. Theme colors adapt to light and dark themes.
 const SEVERITY_COLORS = {
   low: new vscode.ThemeColor("charts.green"),
   medium: new vscode.ThemeColor("charts.yellow"),
@@ -57,11 +57,16 @@ function refreshStatus() {
     statusItem.show();
     return formatted;
   } catch (error) {
-    statusItem.text = "$(pulse) Agent tokens: error";
-    statusItem.tooltip = `Agent Token Status failed to read usage.\n${error.message}`;
+    const formatted = {
+      text: "$(pulse) Context: error",
+      tooltip: `Context Meter failed to read usage.\n${error.message}`,
+      severity: null,
+    };
+    statusItem.text = formatted.text;
+    statusItem.tooltip = formatted.tooltip;
     statusItem.color = undefined;
     statusItem.show();
-    return null;
+    return formatted;
   }
 }
 
@@ -72,18 +77,14 @@ function startRefreshTimer() {
 
 function activate(context) {
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
-  statusItem.name = "Agent Token Status";
+  statusItem.name = "Context Meter";
   statusItem.command = "agentTokenStatus.refresh";
   context.subscriptions.push(statusItem);
   context.subscriptions.push({ dispose: () => clearInterval(refreshTimer) });
 
   context.subscriptions.push(
     vscode.commands.registerCommand("agentTokenStatus.refresh", () => {
-      const formatted = refreshStatus();
-      const message = formatted
-        ? formatted.tooltip.split("\n").join(" · ")
-        : "Agent Token Status failed to read usage.";
-      vscode.window.showInformationMessage(message);
+      refreshStatus();
     }),
   );
 

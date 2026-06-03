@@ -1,16 +1,25 @@
 {
-  "name": "agent-token-status",
-  "displayName": "Agent Token Status",
-  "description": "Show Codex and Claude Code token/context usage in the VS Code status bar.",
+  "name": "context-meter",
+  "displayName": "Context Meter",
+  "description": "Track Codex and Claude Code context usage in the VS Code status bar.",
   "version": "0.0.1",
-  "private": true,
   "type": "commonjs",
-  "publisher": "local",
+  "publisher": "blingabc",
+  "license": "MIT",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "codex",
+    "token",
+    "context",
+    "status bar"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -21,11 +30,11 @@
     "commands": [
       {
         "command": "agentTokenStatus.refresh",
-        "title": "Agent Token Status: Refresh"
+        "title": "Context Meter: Refresh"
       }
     ],
     "configuration": {
-      "title": "Agent Token Status",
+      "title": "Context Meter",
       "properties": {
         "agentTokenStatus.sessionsRoot": {
           "type": "string",

@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// 递归收集 root 下文件名满足 matchesName 的所有文件。
+// Recursively collect files under root whose filenames match matchesName.
 function walkFiles(root, matchesName, files = []) {
   if (!fs.existsSync(root)) {
     return files;
@@ -19,7 +19,7 @@ function walkFiles(root, matchesName, files = []) {
   return files;
 }
 
-// 按 mtime 降序排序（同 mtime 时按文件名字典序降序，保证结果稳定）。
+// Sort by descending mtime. Break ties by descending filename for stable results.
 function sortByMtimeDesc(files) {
   return files
     .map((file) => ({ file, mtimeMs: fs.statSync(file).mtimeMs }))
@@ -42,10 +42,10 @@ function calculateContextPercent(contextTokens, contextWindow) {
   return Math.round((contextTokens / contextWindow) * 100);
 }
 
-// 状态栏每隔几秒刷新一次，按 (mtime, size) 缓存解析结果，避免重复读取未变化的会话文件。
+// The status bar refreshes every few seconds, so cache parsed results by (mtime, size).
 const lastEventCache = new Map();
 
-// 逐行解析 JSONL，返回最后一条 extract 命中（返回非空）的结果。
+// Parse JSONL line by line and return the last non-null result from extract.
 function readLastMatchingEvent(sessionFile, extract) {
   if (!sessionFile || !fs.existsSync(sessionFile)) {
     return null;

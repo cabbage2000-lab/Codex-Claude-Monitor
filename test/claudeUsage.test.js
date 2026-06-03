@@ -10,7 +10,7 @@ const {
 const { makeTempDir, setMtime, writeJsonl } = require("./testUtils");
 
 test("findLatestClaudeSessionFile returns the newest Claude project jsonl", () => {
-  const root = makeTempDir("agent-token-status-claude-");
+  const root = makeTempDir("context-meter-claude-");
   const older = path.join(root, "projects", "-old", "older.jsonl");
   const newer = path.join(root, "projects", "-new", "newer.jsonl");
 
@@ -23,7 +23,7 @@ test("findLatestClaudeSessionFile returns the newest Claude project jsonl", () =
 });
 
 test("readLatestClaudeUsage extracts context tokens from the last assistant usage", () => {
-  const root = makeTempDir("agent-token-status-claude-");
+  const root = makeTempDir("context-meter-claude-");
   const session = path.join(root, "projects", "-workspace", "session.jsonl");
   writeJsonl(session, [
     { type: "user", message: { role: "user", content: "hello" } },

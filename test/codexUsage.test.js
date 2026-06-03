@@ -6,7 +6,7 @@ const { findLatestSessionFile, readLatestUsage } = require("../src/codexUsage");
 const { makeTempDir, setMtime, writeJsonl } = require("./testUtils");
 
 test("findLatestSessionFile returns the most recently modified rollout file", () => {
-  const root = makeTempDir("agent-token-status-codex-");
+  const root = makeTempDir("context-meter-codex-");
   const older = path.join(root, "2026", "06", "02", "rollout-old.jsonl");
   const newer = path.join(root, "2026", "06", "03", "rollout-new.jsonl");
 
@@ -19,7 +19,7 @@ test("findLatestSessionFile returns the most recently modified rollout file", ()
 });
 
 test("readLatestUsage extracts the last token_count event from a session", () => {
-  const root = makeTempDir("agent-token-status-codex-");
+  const root = makeTempDir("context-meter-codex-");
   const session = path.join(root, "2026", "06", "03", "rollout-test.jsonl");
   writeJsonl(session, [
     {
@@ -74,7 +74,7 @@ test("readLatestUsage extracts the last token_count event from a session", () =>
 });
 
 test("readLatestUsage returns null when no token_count event exists", () => {
-  const root = makeTempDir("agent-token-status-codex-");
+  const root = makeTempDir("context-meter-codex-");
   const session = path.join(root, "2026", "06", "03", "rollout-empty.jsonl");
   writeJsonl(session, [{ type: "session_meta", payload: { id: "abc" } }]);
 

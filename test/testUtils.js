@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-function makeTempDir(prefix = "agent-token-status-") {
+function makeTempDir(prefix = "context-meter-") {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
@@ -15,7 +15,7 @@ function writeJsonl(filePath, entries) {
   );
 }
 
-// time 接受 Date 或 epoch 秒数。
+// time accepts either a Date or epoch seconds.
 function setMtime(filePath, time) {
   fs.utimesSync(filePath, time, time);
 }
