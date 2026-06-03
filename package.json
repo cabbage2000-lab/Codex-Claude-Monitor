@@ -1,0 +1,52 @@
+{
+  "name": "agent-token-status",
+  "displayName": "Agent Token Status",
+  "description": "Show Codex and Claude Code token/context usage in the VS Code status bar.",
+  "version": "0.0.1",
+  "private": true,
+  "type": "commonjs",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:agentTokenStatus.refresh"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentTokenStatus.refresh",
+        "title": "Agent Token Status: Refresh"
+      }
+    ],
+    "configuration": {
+      "title": "Agent Token Status",
+      "properties": {
+        "agentTokenStatus.sessionsRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the Codex sessions directory. Leave empty to use ~/.codex/sessions."
+        },
+        "agentTokenStatus.claudeRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the Claude Code home directory. Leave empty to use ~/.claude."
+        },
+        "agentTokenStatus.refreshIntervalMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1000,
+          "description": "How often to refresh token usage from local agent session files."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
