@@ -185,10 +185,6 @@ function formatAgentUsage(usage, now = Date.now()) {
   lines.push(...formatRateLimits(usage.rateLimits, now));
 
   const textParts = [`${provider} ⚡ ${contextPercent}`];
-  if (modelName) {
-    textParts.push(`${modelName}${isOneMillion ? " (1M)" : ""}`);
-  }
-  textParts.push(...formatRateLimitsStatusBar(usage.rateLimits));
 
   return {
     text: textParts.join(" | "),

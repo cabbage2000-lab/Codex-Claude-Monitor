@@ -105,7 +105,7 @@ test("readLatestAgentUsage selects Claude when Claude session is newer", () => {
   const formatted = formatAgentUsage(usage);
 
   assert.equal(usage.provider, "Claude");
-  assert.equal(formatted.text, "Claude ⚡ 18% | Opus 4.8 (1M)");
+  assert.equal(formatted.text, "Claude ⚡ 18%");
   assert.equal(
     formatted.tooltip,
     [
@@ -166,7 +166,7 @@ test("formatRateLimits falls back to day label for mid-length windows", () => {
   assert.deepEqual(lines, ["2d usage: 56%"]);
 });
 
-test("formatAgentUsage renders multi-line tooltip with Codex rate limits", () => {
+test("formatAgentUsage keeps Codex rate limits out of the status bar", () => {
   const now = new Date(2026, 5, 3, 12, 0).getTime();
   const sameDayReset = Math.floor(new Date(2026, 5, 3, 14, 32).getTime() / 1000);
   const nextWeekReset = Math.floor(new Date(2026, 5, 8, 9, 24).getTime() / 1000);
@@ -185,7 +185,7 @@ test("formatAgentUsage renders multi-line tooltip with Codex rate limits", () =>
     now,
   );
 
-  assert.equal(formatted.text, "Codex ⚡ 3% | 5H: 21% | Weekly: 10%");
+  assert.equal(formatted.text, "Codex ⚡ 3%");
   assert.equal(
     formatted.tooltip,
     [
@@ -196,7 +196,7 @@ test("formatAgentUsage renders multi-line tooltip with Codex rate limits", () =>
   );
 });
 
-test("formatAgentUsage appends model line for Claude usage", () => {
+test("formatAgentUsage keeps Claude model details in the tooltip only", () => {
   const formatted = formatAgentUsage({
     provider: "Claude",
     model: "claude-opus-4-8",
@@ -209,7 +209,7 @@ test("formatAgentUsage appends model line for Claude usage", () => {
     formatted.tooltip,
     ["Claude: ctx 185k / 1m (18%)", "Model: Opus 4.8 (1M context)"].join("\n"),
   );
-  assert.equal(formatted.text, "Claude ⚡ 18% | Opus 4.8 (1M)");
+  assert.equal(formatted.text, "Claude ⚡ 18%");
 });
 
 test("formatModelName maps Claude model ids to friendly names and ignores others", () => {
@@ -229,7 +229,7 @@ test("formatAgentUsage drops the 1M marker for 200k Claude models", () => {
     contextPercent: 50,
   });
 
-  assert.equal(formatted.text, "Claude ⚡ 50% | Sonnet 4.6");
+  assert.equal(formatted.text, "Claude ⚡ 50%");
   assert.match(formatted.tooltip, /Model: Sonnet 4\.6\n?/);
 });
 
