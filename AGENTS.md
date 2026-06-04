@@ -49,7 +49,7 @@ Workspace filtering is handled outside the VS Code entry point where possible. `
 - `src/sessionFiles.js`: shared provider utilities for recursive file scanning, mtime sorting, JSONL parsing, context percentage calculation, and cached last-matching-event reads.
 - `src/codexUsage.js`: scans `~/.codex/sessions` for `rollout-*.jsonl`, reads the latest `token_count` event, and uses `last_token_usage.input_tokens / model_context_window`.
 - `src/claudeUsage.js`: scans `~/.claude/projects` for `.jsonl`, reads the latest assistant `message.usage`, and infers the context window from the model name.
-- `src/agentUsage.js`: aggregation and formatting layer. It reads provider candidates, selects the most recent `updatedAt`, and formats status bar text (provider, context percent, and compact Codex 5h/weekly rate-limit segments), tooltip text, usage severity (`low`/`medium`/`high`, used by `extension.js` for status bar coloring), model details, and Codex rate-limit rows.
+- `src/agentUsage.js`: aggregation and formatting layer. It reads provider candidates, selects the most recent `updatedAt`, and formats status bar text (just provider and context percent, e.g. `Claude ⚡ 9%`), tooltip text, usage severity (`low`/`medium`/`high`, used by `extension.js` for status bar coloring), model details, and Codex rate-limit rows. The friendly model name and Codex 5h/weekly rate-limit segments are kept out of the status bar and surfaced only in the tooltip.
 - `src/extension.js`: the only file that depends on the `vscode` API. It owns the status bar item, refresh timer, configuration reads, workspace folder extraction, and `agentTokenStatus.refresh`.
 
 Provider contract:
@@ -88,6 +88,6 @@ npm test
 For UI-facing text changes, update the matching expectations in `test/agentUsage.test.js` and verify the extension manually in VS Code when practical:
 
 1. Run `Developer: Reload Window`.
-2. Confirm the status bar shows the active provider, context percentage, any Codex rate-limit segments, and the severity color (green / yellow / red).
+2. Confirm the status bar shows the active provider, context percentage, and the severity color (green / yellow / red).
 3. Hover the status bar item to inspect tooltip details.
 4. Click the status bar item and confirm it refreshes without opening a notification.
