@@ -16,8 +16,8 @@ The extension reads local session files for both Codex and Claude Code, then dis
   - 🟢 green below 50%
   - 🟡 yellow at 50–79%
   - 🔴 red at 80% and above
-- **Codex rate-limit segments** in the status bar. When Codex reports usage, the 5-hour and weekly windows are shown alongside the context percentage.
-- **Detailed hover tooltip** with exact token counts, the friendly model name, Claude token composition and cache-hit rate, and Codex rate-limit reset times.
+- **Minimal status bar** showing just the active provider and context percentage, so it stays compact.
+- **Detailed hover tooltip** with exact token counts, the friendly model name, Claude token composition and cache-hit rate, and Codex 5-hour / weekly rate-limit usage and reset times.
 - **Workspace-aware filtering** — only sessions whose working directory lives inside your current VS Code workspace are counted, so CLI sessions from other projects are ignored.
 - **Click to refresh** immediately, plus automatic refresh on a configurable interval.
 
@@ -26,13 +26,12 @@ The extension reads local session files for both Codex and Claude Code, then dis
 The status bar shows compact text such as:
 
 ```text
-Codex ⚡ 13% | 5H: 45% | Weekly: 23%
-Claude ⚡ 18% | Opus 4.8 (1M)
+Codex ⚡ 13%
+Claude ⚡ 18%
 ```
 
 - The leading label is the active provider, followed by the ⚡ lightning bolt and the context usage percentage.
-- For Claude, a friendly model segment (e.g. `Opus 4.8`, with a `(1M)` marker on 1M-context models) is appended.
-- For Codex, the 5-hour (`5H`) and weekly (`Weekly`) rate-limit windows are appended when available.
+- The friendly model name (e.g. `Opus 4.8`) and Codex rate-limit windows are kept out of the status bar and shown in the hover tooltip instead.
 - The item color reflects context-usage severity (green / yellow / red, see above).
 - Codex percentages come from `input_tokens / model_context_window` for the latest request.
 - Claude Code percentages come from `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, divided by the inferred context window.
