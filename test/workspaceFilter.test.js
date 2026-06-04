@@ -69,6 +69,17 @@ test("codex readLatestUsage matches sessions in a subdirectory of the workspace"
   assert.equal(usage.sessionFile, file);
 });
 
+test("codex readLatestUsage matches Windows workspace paths case-insensitively", () => {
+  const sessionsRoot = makeTempDir();
+  const file = path.join(sessionsRoot, "2026", "06", "03", "rollout-windows.jsonl");
+
+  writeJsonl(file, codexEntries("C:\\Users\\Alice\\Repo\\packages\\app", 4000, 100000));
+
+  const usage = readLatestUsage(sessionsRoot, ["c:\\users\\alice\\repo"]);
+  assert.ok(usage);
+  assert.equal(usage.sessionFile, file);
+});
+
 test("codex readLatestUsage returns null when no session matches the workspace", () => {
   const sessionsRoot = makeTempDir();
   const file = path.join(sessionsRoot, "2026", "06", "03", "rollout-x.jsonl");
@@ -114,6 +125,18 @@ test("claude filter matches munged subdirectory project dirs", () => {
   writeJsonl(file, claudeEntries("2026-06-03T00:00:00Z", 4000));
 
   const usage = readLatestClaudeUsage(claudeRoot, [workspace]);
+  assert.ok(usage);
+  assert.equal(usage.sessionFile, file);
+});
+
+test("claude filter matches Windows project dirs case-insensitively", () => {
+  const claudeRoot = makeTempDir();
+  const matchingDir = mungeClaudeProjectPath("C:\\Users\\Alice\\Repo");
+  const file = path.join(claudeRoot, "projects", matchingDir, "s.jsonl");
+
+  writeJsonl(file, claudeEntries("2026-06-03T00:00:00Z", 4000));
+
+  const usage = readLatestClaudeUsage(claudeRoot, ["c:\\users\\alice\\repo"]);
   assert.ok(usage);
   assert.equal(usage.sessionFile, file);
 });

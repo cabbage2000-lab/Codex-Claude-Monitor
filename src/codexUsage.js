@@ -8,16 +8,10 @@ const {
   sortByMtimeDesc,
   walkFiles,
 } = require("./sessionFiles");
+const { isPathInside } = require("./pathMatching");
 
 function getDefaultSessionsRoot() {
   return path.join(os.homedir(), ".codex", "sessions");
-}
-
-function isPathInside(child, parent) {
-  if (typeof child !== "string" || !child) {
-    return false;
-  }
-  return child === parent || child.startsWith(parent + path.sep);
 }
 
 function readFirstLine(sessionFile, maxBytes = 1024 * 1024) {

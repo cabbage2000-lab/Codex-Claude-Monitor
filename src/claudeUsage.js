@@ -7,6 +7,7 @@ const {
   sortByMtimeDesc,
   walkFiles,
 } = require("./sessionFiles");
+const { isWindowsLikePath, matchesText, startsWithText } = require("./pathMatching");
 
 function getDefaultClaudeRoot() {
   return path.join(os.homedir(), ".claude");
@@ -16,17 +17,25 @@ function mungeClaudeProjectPath(absolutePath) {
   return String(absolutePath).replace(/[^a-zA-Z0-9]/g, "-");
 }
 
+function matchesClaudeProjectDir(name, workspaceFolder) {
+  const munged = mungeClaudeProjectPath(workspaceFolder);
+  const caseInsensitive = isWindowsLikePath(workspaceFolder);
+  return (
+    matchesText(name, munged, caseInsensitive) ||
+    startsWithText(name, `${munged}-`, caseInsensitive)
+  );
+}
+
 function listMatchingProjectDirs(projectsRoot, workspaceFolders) {
   if (!fs.existsSync(projectsRoot)) {
     return [];
   }
 
-  const munged = workspaceFolders.map(mungeClaudeProjectPath);
   return fs
     .readdirSync(projectsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .filter((name) => munged.some((m) => name === m || name.startsWith(`${m}-`)))
+    .filter((name) => workspaceFolders.some((folder) => matchesClaudeProjectDir(name, folder)))
     .map((name) => path.join(projectsRoot, name));
 }
 
