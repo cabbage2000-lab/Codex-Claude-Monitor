@@ -1,5 +1,10 @@
 # Codex-Claude-Monitor
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.85.0-007ACC.svg?logo=visualstudiocode)](https://code.visualstudio.com/)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](package.json)
+[![Tests](https://img.shields.io/badge/tests-node%20--test-success.svg)](test/)
+
 Codex-Claude-Monitor is a VS Code extension that tracks context usage for the current Codex **or** Claude Code session right in the status bar.
 
 The extension reads local session files for both Codex and Claude Code, then displays whichever tool was active most recently. It makes **no network requests** — everything is computed from files already on your machine.
@@ -12,7 +17,7 @@ The extension reads local session files for both Codex and Claude Code, then dis
   - 🟡 yellow at 50–79%
   - 🔴 red at 80% and above
 - **Codex rate-limit segments** in the status bar. When Codex reports usage, the 5-hour and weekly windows are shown alongside the context percentage.
-- **Detailed hover tooltip** with exact token counts, the model name, and rate-limit reset times.
+- **Detailed hover tooltip** with exact token counts, the friendly model name, Claude token composition and cache-hit rate, and Codex rate-limit reset times.
 - **Workspace-aware filtering** — only sessions whose working directory lives inside your current VS Code workspace are counted, so CLI sessions from other projects are ignored.
 - **Click to refresh** immediately, plus automatic refresh on a configurable interval.
 
@@ -21,27 +26,30 @@ The extension reads local session files for both Codex and Claude Code, then dis
 The status bar shows compact text such as:
 
 ```text
-Codex ⚡ Context 13% | 5H: 45% | Weekly: 23%
-Claude ⚡ Context 18%
+Codex ⚡ 13% | 5H: 45% | Weekly: 23%
+Claude ⚡ 18% | Opus 4.8 (1M)
 ```
 
-- The leading label is the active provider, followed by the context usage percentage.
+- The leading label is the active provider, followed by the ⚡ lightning bolt and the context usage percentage.
+- For Claude, a friendly model segment (e.g. `Opus 4.8`, with a `(1M)` marker on 1M-context models) is appended.
 - For Codex, the 5-hour (`5H`) and weekly (`Weekly`) rate-limit windows are appended when available.
 - The item color reflects context-usage severity (green / yellow / red, see above).
 - Codex percentages come from `input_tokens / model_context_window` for the latest request.
 - Claude Code percentages come from `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, divided by the inferred context window.
 
-Hover the status bar item to see full detail. Codex shows 5-hour and weekly usage with reset times; Claude shows the model name:
+Hover the status bar item to see full detail. Codex shows 5-hour and weekly usage with reset times; Claude shows the friendly model name plus token composition and cache-hit rate:
 
 ```text
-Codex: Context 136k / 258k (53%)
+Codex: ctx 136k / 258k (53%)
 5h usage: 21% · Reset at 14:32
 Weekly usage: 10% · Reset at 6/8 09:24
 ```
 
 ```text
-Claude: Context 36k / 200k (18%)
-Model: claude-opus-4-8
+Claude: ctx 36k / 1m (18%)
+Model: Opus 4.8 (1M context)
+Tokens: input 2 · cache read 36k · cache create 411
+Cache hit: 100%
 ```
 
 Click the status bar item to refresh immediately without opening a notification. Detailed usage always stays in the hover tooltip.
