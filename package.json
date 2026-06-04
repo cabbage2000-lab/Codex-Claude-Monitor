@@ -5,6 +5,10 @@
   "version": "0.0.1",
   "type": "commonjs",
   "publisher": "jialei2005",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cabbage2000-lab/Codex-Claude-Monitor.git"
+  },
   "license": "MIT",
   "icon": "images/icon.png",
   "engines": {
