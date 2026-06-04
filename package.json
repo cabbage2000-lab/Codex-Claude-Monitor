@@ -2,7 +2,7 @@
   "name": "codex-claude-monitor",
   "displayName": "Codex-Claude-Monitor",
   "description": "Track Codex and Claude Code context usage in the VS Code status bar.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "commonjs",
   "publisher": "jialei2005",
   "repository": {
