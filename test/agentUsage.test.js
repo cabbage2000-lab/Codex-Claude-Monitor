@@ -4,6 +4,8 @@ const test = require("node:test");
 
 const {
   formatAgentUsage,
+  formatClaudeTokenDetail,
+  formatModelName,
   formatRateLimits,
   getUsageSeverity,
   readLatestAgentUsage,
@@ -45,8 +47,8 @@ test("readLatestAgentUsage selects Codex when Codex session is newer", () => {
   const formatted = formatAgentUsage(usage);
 
   assert.equal(usage.provider, "Codex");
-  assert.equal(formatted.text, "Codex 3%");
-  assert.equal(formatted.tooltip, "Codex: Context 8k / 258k (3%)");
+  assert.equal(formatted.text, "Codex ⚡ 3%");
+  assert.equal(formatted.tooltip, "Codex: ctx 8k / 258k (3%)");
   assert.equal(formatted.severity, "low");
 });
 
@@ -103,10 +105,15 @@ test("readLatestAgentUsage selects Claude when Claude session is newer", () => {
   const formatted = formatAgentUsage(usage);
 
   assert.equal(usage.provider, "Claude");
-  assert.equal(formatted.text, "Claude 18%");
+  assert.equal(formatted.text, "Claude ⚡ 18% | Opus 4.8 (1M)");
   assert.equal(
     formatted.tooltip,
-    ["Claude: Context 185k / 1m (18%)", "Model: claude-opus-4-8"].join("\n"),
+    [
+      "Claude: ctx 185k / 1m (18%)",
+      "Model: Opus 4.8 (1M context)",
+      "Tokens: input 2 · cache read 185k · cache create 155",
+      "Cache hit: 100%",
+    ].join("\n"),
   );
   assert.equal(formatted.severity, "low");
 });
@@ -178,10 +185,11 @@ test("formatAgentUsage renders multi-line tooltip with Codex rate limits", () =>
     now,
   );
 
+  assert.equal(formatted.text, "Codex ⚡ 3% | 5H: 21% | Weekly: 10%");
   assert.equal(
     formatted.tooltip,
     [
-      "Codex: Context 8k / 258k (3%)",
+      "Codex: ctx 8k / 258k (3%)",
       "5h usage: 21% · Reset at 14:32",
       "Weekly usage: 10% · Reset at 6/8 09:24",
     ].join("\n"),
@@ -199,6 +207,43 @@ test("formatAgentUsage appends model line for Claude usage", () => {
 
   assert.equal(
     formatted.tooltip,
-    ["Claude: Context 185k / 1m (18%)", "Model: claude-opus-4-8"].join("\n"),
+    ["Claude: ctx 185k / 1m (18%)", "Model: Opus 4.8 (1M context)"].join("\n"),
   );
+  assert.equal(formatted.text, "Claude ⚡ 18% | Opus 4.8 (1M)");
+});
+
+test("formatModelName maps Claude model ids to friendly names and ignores others", () => {
+  assert.equal(formatModelName("claude-opus-4-8"), "Opus 4.8");
+  assert.equal(formatModelName("claude-sonnet-4-6"), "Sonnet 4.6");
+  assert.equal(formatModelName("claude-haiku-4-5-20251001"), "Haiku 4.5");
+  assert.equal(formatModelName("gpt-5"), null);
+  assert.equal(formatModelName(undefined), null);
+});
+
+test("formatAgentUsage drops the 1M marker for 200k Claude models", () => {
+  const formatted = formatAgentUsage({
+    provider: "Claude",
+    model: "claude-sonnet-4-6",
+    contextTokens: 100000,
+    contextWindow: 200000,
+    contextPercent: 50,
+  });
+
+  assert.equal(formatted.text, "Claude ⚡ 50% | Sonnet 4.6");
+  assert.match(formatted.tooltip, /Model: Sonnet 4\.6\n?/);
+});
+
+test("formatClaudeTokenDetail renders composition and cache-hit rows", () => {
+  const rows = formatClaudeTokenDetail({
+    input_tokens: 2,
+    cache_read_input_tokens: 48913,
+    cache_creation_input_tokens: 361,
+  });
+
+  assert.deepEqual(rows, [
+    "Tokens: input 2 · cache read 49k · cache create 361",
+    "Cache hit: 99%",
+  ]);
+  assert.deepEqual(formatClaudeTokenDetail(undefined), []);
+  assert.deepEqual(formatClaudeTokenDetail({ output_tokens: 5 }), []);
 });

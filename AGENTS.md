@@ -6,11 +6,11 @@ Fallback instructions: /Users/blingabc/.promptify/current/adapters/codex/instruc
 Shared rules: /Users/blingabc/.promptify/current/shared
 # END PROMPTIFY MANAGED BLOCK
 
-# Context Meter Repository Guide
+# Codex-Claude-Monitor Repository Guide
 
 ## Project Overview
 
-Context Meter is a local VS Code extension that shows the current Codex or Claude Code context usage percentage in the status bar.
+Codex-Claude-Monitor is a local VS Code extension that shows the current Codex or Claude Code context usage percentage in the status bar.
 
 The project uses CommonJS, Node built-in modules, and the `vscode` API. There is no build step and no runtime dependency beyond VS Code.
 
@@ -31,7 +31,7 @@ node --test test/claudeUsage.test.js
 Local development install:
 
 ```bash
-ln -s /path/to/context-meter ~/.vscode/extensions/context-meter
+ln -s /path/to/codex-claude-monitor ~/.vscode/extensions/codex-claude-monitor
 ```
 
 Then run `Developer: Reload Window` in VS Code.
@@ -49,7 +49,7 @@ Workspace filtering is handled outside the VS Code entry point where possible. `
 - `src/sessionFiles.js`: shared provider utilities for recursive file scanning, mtime sorting, JSONL parsing, context percentage calculation, and cached last-matching-event reads.
 - `src/codexUsage.js`: scans `~/.codex/sessions` for `rollout-*.jsonl`, reads the latest `token_count` event, and uses `last_token_usage.input_tokens / model_context_window`.
 - `src/claudeUsage.js`: scans `~/.claude/projects` for `.jsonl`, reads the latest assistant `message.usage`, and infers the context window from the model name.
-- `src/agentUsage.js`: aggregation and formatting layer. It reads provider candidates, selects the most recent `updatedAt`, and formats status bar text, tooltip text, severity, model details, and Codex rate-limit rows.
+- `src/agentUsage.js`: aggregation and formatting layer. It reads provider candidates, selects the most recent `updatedAt`, and formats status bar text (provider, context percent, and compact Codex 5h/weekly rate-limit segments), tooltip text, usage severity (`low`/`medium`/`high`, used by `extension.js` for status bar coloring), model details, and Codex rate-limit rows.
 - `src/extension.js`: the only file that depends on the `vscode` API. It owns the status bar item, refresh timer, configuration reads, workspace folder extraction, and `agentTokenStatus.refresh`.
 
 Provider contract:
@@ -88,6 +88,6 @@ npm test
 For UI-facing text changes, update the matching expectations in `test/agentUsage.test.js` and verify the extension manually in VS Code when practical:
 
 1. Run `Developer: Reload Window`.
-2. Confirm the status bar shows the active provider and context percentage.
+2. Confirm the status bar shows the active provider, context percentage, any Codex rate-limit segments, and the severity color (green / yellow / red).
 3. Hover the status bar item to inspect tooltip details.
 4. Click the status bar item and confirm it refreshes without opening a notification.

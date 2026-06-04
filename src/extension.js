@@ -29,8 +29,8 @@ function getConfiguredPath(key, getDefault) {
 function getRefreshIntervalMs() {
   const configured = vscode.workspace
     .getConfiguration("agentTokenStatus")
-    .get("refreshIntervalMs", 5000);
-  return Math.max(1000, Number(configured) || 5000);
+    .get("refreshIntervalMs", 10000);
+  return Math.max(1000, Number(configured) || 10000);
 }
 
 function getWorkspaceFolders() {
@@ -58,8 +58,8 @@ function refreshStatus() {
     return formatted;
   } catch (error) {
     const formatted = {
-      text: "$(pulse) Context: error",
-      tooltip: `Context Meter failed to read usage.\n${error.message}`,
+      text: "$(pulse) ctx: error",
+      tooltip: `Codex-Claude-Monitor failed to read usage.\n${error.message}`,
       severity: null,
     };
     statusItem.text = formatted.text;
@@ -77,7 +77,7 @@ function startRefreshTimer() {
 
 function activate(context) {
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
-  statusItem.name = "Context Meter";
+  statusItem.name = "Codex-Claude-Monitor";
   statusItem.command = "agentTokenStatus.refresh";
   context.subscriptions.push(statusItem);
   context.subscriptions.push({ dispose: () => clearInterval(refreshTimer) });

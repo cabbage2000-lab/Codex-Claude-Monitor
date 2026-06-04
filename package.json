@@ -1,10 +1,10 @@
 {
-  "name": "context-meter",
-  "displayName": "Context Meter",
+  "name": "codex-claude-monitor",
+  "displayName": "Codex-Claude-Monitor",
   "description": "Track Codex and Claude Code context usage in the VS Code status bar.",
   "version": "0.0.1",
   "type": "commonjs",
-  "publisher": "blingabc",
+  "publisher": "jialei2005",
   "license": "MIT",
   "icon": "images/icon.png",
   "engines": {
@@ -30,11 +30,11 @@
     "commands": [
       {
         "command": "agentTokenStatus.refresh",
-        "title": "Context Meter: Refresh"
+        "title": "Codex-Claude-Monitor: Refresh"
       }
     ],
     "configuration": {
-      "title": "Context Meter",
+      "title": "Codex-Claude-Monitor",
       "properties": {
         "agentTokenStatus.sessionsRoot": {
           "type": "string",
@@ -48,7 +48,7 @@
         },
         "agentTokenStatus.refreshIntervalMs": {
           "type": "number",
-          "default": 5000,
+          "default": 10000,
           "minimum": 1000,
           "description": "How often to refresh token usage from local agent session files."
         }

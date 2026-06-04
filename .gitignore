@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# VS Code extension build artifacts
+*.vsix
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Local-only Claude settings
+.claude/settings.local.json

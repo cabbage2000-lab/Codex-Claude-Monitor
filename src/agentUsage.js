@@ -30,6 +30,39 @@ function formatCount(value) {
   return String(value);
 }
 
+// Friendly Claude model label, e.g. "claude-opus-4-8" -> "Opus 4.8". Returns null for unrecognized models.
+function formatModelName(model) {
+  const match = String(model || "")
+    .toLowerCase()
+    .match(/(opus|sonnet|haiku)-(\d+)-(\d+)/);
+  if (!match) {
+    return null;
+  }
+  const family = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+  return `${family} ${match[2]}.${match[3]}`;
+}
+
+// Claude token-composition rows for the tooltip. Empty for providers without this breakdown (e.g. Codex).
+function formatClaudeTokenDetail(usage) {
+  if (!usage) {
+    return [];
+  }
+  const input = usage.input_tokens;
+  const cacheRead = usage.cache_read_input_tokens;
+  const cacheCreate = usage.cache_creation_input_tokens;
+  if (![input, cacheRead, cacheCreate].some(Number.isFinite)) {
+    return [];
+  }
+  const rows = [
+    `Tokens: input ${formatCount(input || 0)} · cache read ${formatCount(cacheRead || 0)} · cache create ${formatCount(cacheCreate || 0)}`,
+  ];
+  const total = (input || 0) + (cacheRead || 0) + (cacheCreate || 0);
+  if (total > 0) {
+    rows.push(`Cache hit: ${Math.round(((cacheRead || 0) / total) * 100)}%`);
+  }
+  return rows;
+}
+
 // Usage severity: <50% is low, 50-79% is medium, >=80% is high; invalid percentages return null.
 function getUsageSeverity(contextPercent) {
   if (!Number.isFinite(contextPercent)) {
@@ -96,6 +129,36 @@ function formatRateLimits(rateLimits, now = Date.now()) {
     .filter(Boolean);
 }
 
+// Short status-bar label for a rate-limit window: 5h -> "5H", weekly -> "Weekly", else "Nd".
+function formatRateLimitShortLabel(minutes) {
+  if (minutes >= 7 * 24 * 60) {
+    return "Weekly";
+  }
+  if (minutes <= 24 * 60) {
+    return `${Math.round(minutes / 60)}H`;
+  }
+  return `${Math.round(minutes / (24 * 60))}d`;
+}
+
+// Compact status-bar rate-limit segments, e.g. ["5H: 45%", "Weekly: 23%"]. Missing fields omit the segment.
+function formatRateLimitsStatusBar(rateLimits) {
+  if (!rateLimits) {
+    return [];
+  }
+  return [rateLimits.primary, rateLimits.secondary]
+    .map((limitWindow) => {
+      if (
+        !limitWindow ||
+        !Number.isFinite(limitWindow.used_percent) ||
+        !Number.isFinite(limitWindow.window_minutes)
+      ) {
+        return null;
+      }
+      return `${formatRateLimitShortLabel(limitWindow.window_minutes)}: ${Math.round(limitWindow.used_percent)}%`;
+    })
+    .filter(Boolean);
+}
+
 function formatAgentUsage(usage, now = Date.now()) {
   if (!usage) {
     return {
@@ -107,16 +170,28 @@ function formatAgentUsage(usage, now = Date.now()) {
 
   const provider = usage.provider || "Agent";
   const contextPercent = Number.isFinite(usage.contextPercent) ? `${usage.contextPercent}%` : "n/a";
+  const modelName = formatModelName(usage.model);
+  const isOneMillion = usage.contextWindow >= 1000000;
   const lines = [
-    `${provider}: Context ${formatCount(usage.contextTokens)} / ${formatCount(usage.contextWindow)} (${contextPercent})`,
+    `${provider}: ctx ${formatCount(usage.contextTokens)} / ${formatCount(usage.contextWindow)} (${contextPercent})`,
   ];
   if (usage.model) {
-    lines.push(`Model: ${usage.model}`);
+    const modelDisplay = modelName
+      ? `${modelName}${isOneMillion ? " (1M context)" : ""}`
+      : usage.model;
+    lines.push(`Model: ${modelDisplay}`);
   }
+  lines.push(...formatClaudeTokenDetail(usage.usage));
   lines.push(...formatRateLimits(usage.rateLimits, now));
 
+  const textParts = [`${provider} ⚡ ${contextPercent}`];
+  if (modelName) {
+    textParts.push(`${modelName}${isOneMillion ? " (1M)" : ""}`);
+  }
+  textParts.push(...formatRateLimitsStatusBar(usage.rateLimits));
+
   return {
-    text: `${provider} ${contextPercent}`,
+    text: textParts.join(" | "),
     tooltip: lines.join("\n"),
     severity: getUsageSeverity(usage.contextPercent),
   };
@@ -124,8 +199,11 @@ function formatAgentUsage(usage, now = Date.now()) {
 
 module.exports = {
   formatAgentUsage,
+  formatClaudeTokenDetail,
   formatCount,
+  formatModelName,
   formatRateLimits,
+  formatRateLimitsStatusBar,
   getUsageSeverity,
   readLatestAgentUsage,
 };
