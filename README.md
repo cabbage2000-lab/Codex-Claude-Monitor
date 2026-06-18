@@ -1,4 +1,4 @@
-# Codex-Claude-Monitor
+# Codex Claude Context Monitor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.85.0-007ACC.svg?logo=visualstudiocode)](https://code.visualstudio.com/)
@@ -78,21 +78,21 @@ Constraints: <locked decisions / scope>
 
 Paste it into a fresh (or the current) session and the Claude there fills in each placeholder from the session history. Surfacing the suffix is the only automatic behavior; **generating and copying the prompt is strictly user-triggered** — nothing is copied or sent until you click.
 
-## Local Installation
+## Installation
 
-This extension is meant for local use and is not published to the marketplace. Link this directory into the VS Code extensions directory:
+**From the Marketplace.** Search for "Codex-Claude-Monitor" in the Extensions view, or run this in the Command Palette (`Ctrl/Cmd+Shift+P`):
+
+```text
+ext install jialei2005.codex-claude-ctx-monitor
+```
+
+**From source (development).** Link this directory into the VS Code extensions directory:
 
 ```bash
 ln -s /path/to/codex-claude-monitor ~/.vscode/extensions/codex-claude-monitor
 ```
 
-Then run this command from the VS Code command palette:
-
-```text
-Developer: Reload Window
-```
-
-After reload, Codex or Claude Code context usage appears on the right side of the status bar. You can also trigger commands manually at any time:
+Then reload the window via the Command Palette (`Developer: Reload Window`). After reload, Codex or Claude Code context usage appears on the right side of the status bar. You can also trigger commands manually at any time:
 
 ```text
 Codex-Claude-Monitor: Refresh
