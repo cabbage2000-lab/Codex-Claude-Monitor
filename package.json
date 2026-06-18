@@ -27,7 +27,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:agentTokenStatus.refresh"
+    "onCommand:agentTokenStatus.refresh",
+    "onCommand:agentTokenStatus.handoff"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -35,6 +36,10 @@
       {
         "command": "agentTokenStatus.refresh",
         "title": "Codex-Claude-Monitor: Refresh"
+      },
+      {
+        "command": "agentTokenStatus.handoff",
+        "title": "Codex-Claude-Monitor: Handoff"
       }
     ],
     "configuration": {
