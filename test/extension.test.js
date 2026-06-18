@@ -114,9 +114,9 @@ test("status bar click refreshes without showing a notification", () => {
   }
 });
 
-test("handoff command copies prompt to clipboard and notifies at/above threshold", async () => {
+test("handoff command copies prompt to clipboard and notifies above threshold", async () => {
   const { state, restore } = loadExtension({
-    usage: { provider: "Claude", contextPercent: 85 },
+    usage: { provider: "Claude", contextPercent: 55 },
   });
   try {
     assert.equal(typeof state.commands["agentTokenStatus.handoff"], "function");
@@ -124,21 +124,21 @@ test("handoff command copies prompt to clipboard and notifies at/above threshold
 
     assert.deepEqual(state.clipboardTexts, ["HANDOFF_PROMPT"]);
     assert.equal(state.informationMessages.length, 1);
-    assert.match(state.informationMessages[0], /已复制/);
+    assert.match(state.informationMessages[0], /paste it into the session/i);
   } finally {
     restore();
   }
 });
 
-test("handoff command still copies when below threshold, with a different message", async () => {
+test("handoff command does not trigger at the threshold, with a different message", async () => {
   const { state, restore } = loadExtension({
-    usage: { provider: "Claude", contextPercent: 30 },
+    usage: { provider: "Claude", contextPercent: 50 },
   });
   try {
     await state.commands["agentTokenStatus.handoff"]();
 
     assert.deepEqual(state.clipboardTexts, ["HANDOFF_PROMPT"]);
-    assert.match(state.informationMessages[0], /未到 80%/);
+    assert.match(state.informationMessages[0], /below the .* threshold/i);
   } finally {
     restore();
   }

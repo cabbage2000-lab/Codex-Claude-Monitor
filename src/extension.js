@@ -17,8 +17,8 @@ const SEVERITY_COLORS = {
   high: new vscode.ThemeColor("charts.red"),
 };
 
-// Context percent at/above which the handoff entry appears in the status bar.
-const HANDOFF_THRESHOLD = 80;
+// Context percent above which the handoff entry appears in the status bar.
+const HANDOFF_THRESHOLD = 50;
 
 let statusItem;
 let handoffItem;
@@ -53,13 +53,13 @@ function readUsage() {
   });
 }
 
-// Handoff is offered only when context usage is at/above the threshold, so the suffix stays hidden
-// until the session is genuinely near full. Surfacing it is non-destructive: clicking only copies.
+// Handoff is offered only when context usage is strictly above the threshold, so the suffix stays
+// hidden until the session is genuinely filling up. Surfacing it is non-destructive: click only copies.
 function shouldOfferHandoff(usage) {
   return Boolean(
     usage &&
       Number.isFinite(usage.contextPercent) &&
-      usage.contextPercent >= HANDOFF_THRESHOLD,
+      usage.contextPercent > HANDOFF_THRESHOLD,
   );
 }
 
@@ -125,9 +125,8 @@ function activate(context) {
   // It only shows at/above HANDOFF_THRESHOLD so it reads as an actionable "time to hand off" cue.
   handoffItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 89);
   handoffItem.name = "Codex-Claude-Monitor Handoff";
-  handoffItem.text = "$(export) 交接";
-  handoffItem.tooltip =
-    "上下文已达 80%。点击复制交接提示词,粘贴到当前窗口让 Claude 填全。";
+  handoffItem.text = "$(export) Handoff";
+  handoffItem.tooltip = `Context exceeds ${HANDOFF_THRESHOLD}%. Click to copy a handoff prompt and paste it into the session.`;
   handoffItem.command = "agentTokenStatus.handoff";
   context.subscriptions.push(handoffItem);
 
@@ -145,8 +144,8 @@ function activate(context) {
       await vscode.env.clipboard.writeText(prompt);
       vscode.window.showInformationMessage(
         shouldOfferHandoff(usage)
-          ? "交接提示词已复制,粘贴到当前窗口让 Claude 填全。"
-          : "交接提示词已复制(当前上下文未到 80%)。",
+          ? "Handoff prompt copied — paste it into the session for Claude to fill in."
+          : `Handoff prompt copied (context is still below the ${HANDOFF_THRESHOLD}% threshold).`,
       );
     }),
   );

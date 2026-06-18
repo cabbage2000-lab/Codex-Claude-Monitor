@@ -20,7 +20,7 @@ The extension reads local session files for both Codex and Claude Code, then dis
 - **Detailed hover tooltip** with exact token counts, the friendly model name, Claude token composition and cache-hit rate, and Codex 5-hour / weekly rate-limit usage and reset times.
 - **Workspace-aware filtering** — only sessions whose working directory lives inside your current VS Code workspace are counted, so CLI sessions from other projects are ignored.
 - **Click to refresh** immediately, plus automatic refresh on a configurable interval.
-- **Handoff at 80%+** — when context reaches 80%, a `交接` (handoff) entry appears beside the status bar. Click it to copy a paste-ready continuation prompt (session metadata + git state + a promptify-style skeleton) to the clipboard, so a fresh session can pick up where this one left off.
+- **Handoff above 50%** — when context exceeds 50%, a `Handoff` entry appears beside the status bar. Click it to copy a compact continuation prompt (context %, session file, branch, plus a minimal Task/Done/Next/Constraints skeleton) to the clipboard, so a fresh session can pick up where this one left off.
 
 ## Display
 
@@ -54,40 +54,29 @@ Cache hit: 100%
 
 Click the status bar item to refresh immediately without opening a notification. Detailed usage always stays in the hover tooltip.
 
-### Handoff (context at 80%+)
+### Handoff (context above 50%)
 
-When context usage reaches 80%, a second status bar item appears just beside the main one:
-
-```text
-$(export) 交接
-```
-
-Click it to copy a paste-ready **handoff (continuation) prompt** to the clipboard. The prompt bundles auto-collected session metadata — provider, session file, context tokens / window / percent, model, Claude token composition and cache-hit rate, and git branch / status / recent commits — followed by an English section skeleton modeled on the promptify handoff template:
+When context usage exceeds 50%, a second status bar item appears just beside the main one:
 
 ```text
-Generate a paste-ready handoff (continuation) prompt for the current session ...
-
-## Current session (auto-collected by Codex-Claude-Monitor)
-- Session: Claude
-- Session file: /home/u/.claude/projects/proj/abc.jsonl
-- Context: 850k / 1m (85%) ← near limit, consider handing off
-- Model: Opus 4.8
-- Git branch: main
-- Git status:
-   M src/a.js
-- Recent commits:
-  abc1234 fix bug
-
-Continue this work from the previous session. <One-line restatement of the task goal ...>
-
-Context to read first:
-- <PLAN.md / CLAUDE.md / relevant files, plans, issues, or logs>
-...
-Stop if:
-- <Stop and ask on scope-expanding changes, destructive operations, ...>
+$(export) Handoff
 ```
 
-Paste it into a fresh (or the current) session and the Claude there fills in the placeholders — `Progress so far`, `Where it stopped`, `Next`, `Constraints`, `Done when`, `Stop if` — from the session history. Surfacing the suffix is the only automatic behavior; **generating and copying the prompt is strictly user-triggered** — nothing is copied or sent until you click.
+Click it to copy a paste-ready **handoff (continuation) prompt** to the clipboard. It keeps only what a fresh session can't infer — why you're handing off and where to continue — and trusts the model to fill in the rest:
+
+```text
+Continue this work in a fresh context (previous session at 85%).
+
+Session: /home/u/.claude/projects/proj/abc.jsonl
+Branch: main
+
+Task: <one-line goal>
+Done: <completed work — do not redo>
+Next: <where it stopped + immediate next step>
+Constraints: <locked decisions / scope>
+```
+
+Paste it into a fresh (or the current) session and the Claude there fills in each placeholder from the session history. Surfacing the suffix is the only automatic behavior; **generating and copying the prompt is strictly user-triggered** — nothing is copied or sent until you click.
 
 ## Local Installation
 
@@ -110,7 +99,7 @@ Codex-Claude-Monitor: Refresh
 Codex-Claude-Monitor: Handoff
 ```
 
-`Refresh` re-reads usage immediately. `Handoff` copies the handoff prompt to the clipboard whether or not context has reached 80%, so you can generate one on demand.
+`Refresh` re-reads usage immediately. `Handoff` copies the handoff prompt to the clipboard whether or not context has exceeded 50%, so you can generate one on demand.
 
 ## Configuration
 
