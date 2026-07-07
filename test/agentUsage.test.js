@@ -172,14 +172,14 @@ test("formatRateLimitsStatusBar renders compact segments for both windows", () =
     primary: { used_percent: 45.4, window_minutes: 300 },
     secondary: { used_percent: 23.0, window_minutes: 10080 },
   });
-  assert.deepEqual(segments, ["5h 45%", "w 23%"]);
+  assert.deepEqual(segments, ["$(history) 45%", "$(calendar) 23%"]);
 });
 
-test("formatRateLimitsStatusBar falls back to day label for mid-length windows", () => {
+test("formatRateLimitsStatusBar maps mid-length windows to the calendar icon", () => {
   const segments = formatRateLimitsStatusBar({
     primary: { used_percent: 55.6, window_minutes: 2880 },
   });
-  assert.deepEqual(segments, ["2d 56%"]);
+  assert.deepEqual(segments, ["$(calendar) 56%"]);
 });
 
 test("formatRateLimitsStatusBar omits missing or invalid windows", () => {
@@ -213,7 +213,7 @@ test("formatAgentUsage shows compact Codex rate limits in the status bar", () =>
     now,
   );
 
-  assert.equal(formatted.text, "Codex ⚡ 3% · 5h 21% · w 10%");
+  assert.equal(formatted.text, "Codex ⚡ 3% · $(history) 21% · $(calendar) 10%");
   assert.equal(
     formatted.tooltip,
     [
@@ -303,7 +303,7 @@ test("readLatestAgentUsage attaches claudeRateLimits when Claude wins", () => {
 
   assert.equal(usage.provider, "Claude");
   assert.deepEqual(usage.rateLimits, claudeRateLimits);
-  assert.match(formatAgentUsage(usage).text, /^Claude ⚡ \d+% · 5h 25% · w 8%$/);
+  assert.match(formatAgentUsage(usage).text, /^Claude ⚡ \d+% · \$\(history\) 25% · \$\(calendar\) 8%$/);
 });
 
 test("readLatestAgentUsage does not attach claudeRateLimits to Codex", () => {
