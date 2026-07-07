@@ -194,7 +194,7 @@ test("formatRateLimitsStatusBar omits missing or invalid windows", () => {
   );
 });
 
-test("formatAgentUsage keeps Codex rate limits out of the status bar", () => {
+test("formatAgentUsage shows compact Codex rate limits in the status bar", () => {
   const now = new Date(2026, 5, 3, 12, 0).getTime();
   const sameDayReset = Math.floor(new Date(2026, 5, 3, 14, 32).getTime() / 1000);
   const nextWeekReset = Math.floor(new Date(2026, 5, 8, 9, 24).getTime() / 1000);
@@ -213,7 +213,7 @@ test("formatAgentUsage keeps Codex rate limits out of the status bar", () => {
     now,
   );
 
-  assert.equal(formatted.text, "Codex ⚡ 3%");
+  assert.equal(formatted.text, "Codex ⚡ 3% · 5h 21% · w 10%");
   assert.equal(
     formatted.tooltip,
     [

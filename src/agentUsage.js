@@ -185,9 +185,10 @@ function formatAgentUsage(usage, now = Date.now()) {
   lines.push(...formatRateLimits(usage.rateLimits, now));
 
   const textParts = [`${provider} ⚡ ${contextPercent}`];
+  textParts.push(...formatRateLimitsStatusBar(usage.rateLimits));
 
   return {
-    text: textParts.join(" | "),
+    text: textParts.join(" · "),
     tooltip: lines.join("\n"),
     severity: getUsageSeverity(usage.contextPercent),
   };
