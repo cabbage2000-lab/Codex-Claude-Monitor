@@ -48,7 +48,7 @@ test("readLatestAgentUsage selects Codex when Codex session is newer", () => {
   const formatted = formatAgentUsage(usage);
 
   assert.equal(usage.provider, "Codex");
-  assert.equal(formatted.text, "Codex ⚡ 3%");
+  assert.equal(formatted.text, "Codex $(comment) 3%");
   assert.equal(formatted.tooltip, "Codex: ctx 8k / 258k (3%)");
   assert.equal(formatted.severity, "low");
 });
@@ -106,7 +106,7 @@ test("readLatestAgentUsage selects Claude when Claude session is newer", () => {
   const formatted = formatAgentUsage(usage);
 
   assert.equal(usage.provider, "Claude");
-  assert.equal(formatted.text, "Claude ⚡ 18%");
+  assert.equal(formatted.text, "Claude $(comment) 18%");
   assert.equal(
     formatted.tooltip,
     [
@@ -213,7 +213,7 @@ test("formatAgentUsage shows compact Codex rate limits in the status bar", () =>
     now,
   );
 
-  assert.equal(formatted.text, "Codex ⚡ 3% · $(history) 21% · $(calendar) 10%");
+  assert.equal(formatted.text, "Codex $(comment) 3% · $(history) 21% · $(calendar) 10%");
   assert.equal(
     formatted.tooltip,
     [
@@ -237,7 +237,7 @@ test("formatAgentUsage keeps Claude model details in the tooltip only", () => {
     formatted.tooltip,
     ["Claude: ctx 185k / 1m (18%)", "Model: Opus 4.8 (1M context)"].join("\n"),
   );
-  assert.equal(formatted.text, "Claude ⚡ 18%");
+  assert.equal(formatted.text, "Claude $(comment) 18%");
 });
 
 test("formatModelName maps Claude model ids to friendly names and ignores others", () => {
@@ -257,7 +257,7 @@ test("formatAgentUsage drops the 1M marker for 200k Claude models", () => {
     contextPercent: 50,
   });
 
-  assert.equal(formatted.text, "Claude ⚡ 50%");
+  assert.equal(formatted.text, "Claude $(comment) 50%");
   assert.match(formatted.tooltip, /Model: Sonnet 4\.6\n?/);
 });
 
@@ -303,7 +303,7 @@ test("readLatestAgentUsage attaches claudeRateLimits when Claude wins", () => {
 
   assert.equal(usage.provider, "Claude");
   assert.deepEqual(usage.rateLimits, claudeRateLimits);
-  assert.match(formatAgentUsage(usage).text, /^Claude ⚡ \d+% · \$\(history\) 25% · \$\(calendar\) 8%$/);
+  assert.match(formatAgentUsage(usage).text, /^Claude \$\(comment\) \d+% · \$\(history\) 25% · \$\(calendar\) 8%$/);
 });
 
 test("readLatestAgentUsage does not attach claudeRateLimits to Codex", () => {

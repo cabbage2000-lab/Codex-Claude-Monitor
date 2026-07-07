@@ -187,7 +187,7 @@ function formatAgentUsage(usage, now = Date.now()) {
   lines.push(...formatClaudeTokenDetail(usage.usage));
   lines.push(...formatRateLimits(usage.rateLimits, now));
 
-  const textParts = [`${provider} ⚡ ${contextPercent}`];
+  const textParts = [`${provider} $(comment) ${contextPercent}`];
   textParts.push(...formatRateLimitsStatusBar(usage.rateLimits));
 
   return {
