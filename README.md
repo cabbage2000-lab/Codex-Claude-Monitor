@@ -16,7 +16,7 @@ The extension reads local session files for both Codex and Claude Code, then dis
   - 🟢 green below 50%
   - 🟡 yellow at 50–79%
   - 🔴 red at 80% and above
-- **Minimal status bar** showing just the active provider and context percentage, so it stays compact.
+- **Minimal status bar** showing the active provider, context percentage, and (for Codex) compact 5h/weekly usage, so it stays compact.
 - **Detailed hover tooltip** with exact token counts, the friendly model name, Claude token composition and cache-hit rate, and Codex 5-hour / weekly rate-limit usage and reset times.
 - **Workspace-aware filtering** — only sessions whose working directory lives inside your current VS Code workspace are counted, so CLI sessions from other projects are ignored.
 - **Click to refresh** immediately, plus automatic refresh on a configurable interval.
@@ -27,12 +27,13 @@ The extension reads local session files for both Codex and Claude Code, then dis
 The status bar shows compact text such as:
 
 ```text
-Codex ⚡ 13%
+Codex ⚡ 13% · 5h 45% · w 23%
 Claude ⚡ 18%
 ```
 
 - The leading label is the active provider, followed by the ⚡ lightning bolt and the context usage percentage.
-- The friendly model name (e.g. `Opus 4.8`) and Codex rate-limit windows are kept out of the status bar and shown in the hover tooltip instead.
+- Codex sessions append compact rate-limit segments: `5h 45%` is the 5-hour window and `w 23%` is the weekly window. Claude session files carry no rate-limit data, so those segments are omitted.
+- The friendly model name (e.g. `Opus 4.8`) and rate-limit reset times stay in the hover tooltip.
 - The item color reflects context-usage severity (green / yellow / red, see above).
 - Codex percentages come from `input_tokens / model_context_window` for the latest request.
 - Claude Code percentages come from `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, divided by the inferred context window.
