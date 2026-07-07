@@ -7,6 +7,7 @@ const {
   formatClaudeTokenDetail,
   formatModelName,
   formatRateLimits,
+  formatRateLimitsStatusBar,
   getUsageSeverity,
   readLatestAgentUsage,
 } = require("../src/agentUsage");
@@ -164,6 +165,33 @@ test("formatRateLimits falls back to day label for mid-length windows", () => {
     now,
   );
   assert.deepEqual(lines, ["2d usage: 56%"]);
+});
+
+test("formatRateLimitsStatusBar renders compact segments for both windows", () => {
+  const segments = formatRateLimitsStatusBar({
+    primary: { used_percent: 45.4, window_minutes: 300 },
+    secondary: { used_percent: 23.0, window_minutes: 10080 },
+  });
+  assert.deepEqual(segments, ["5h 45%", "w 23%"]);
+});
+
+test("formatRateLimitsStatusBar falls back to day label for mid-length windows", () => {
+  const segments = formatRateLimitsStatusBar({
+    primary: { used_percent: 55.6, window_minutes: 2880 },
+  });
+  assert.deepEqual(segments, ["2d 56%"]);
+});
+
+test("formatRateLimitsStatusBar omits missing or invalid windows", () => {
+  assert.deepEqual(formatRateLimitsStatusBar(null), []);
+  assert.deepEqual(formatRateLimitsStatusBar({}), []);
+  assert.deepEqual(
+    formatRateLimitsStatusBar({
+      primary: { used_percent: NaN, window_minutes: 300 },
+      secondary: { used_percent: 10, window_minutes: undefined },
+    }),
+    [],
+  );
 });
 
 test("formatAgentUsage keeps Codex rate limits out of the status bar", () => {

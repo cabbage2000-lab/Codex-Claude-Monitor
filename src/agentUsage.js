@@ -129,18 +129,18 @@ function formatRateLimits(rateLimits, now = Date.now()) {
     .filter(Boolean);
 }
 
-// Short status-bar label for a rate-limit window: 5h -> "5H", weekly -> "Weekly", else "Nd".
+// Short status-bar label for a rate-limit window: 5h -> "5h", weekly -> "w", else "Nd".
 function formatRateLimitShortLabel(minutes) {
   if (minutes >= 7 * 24 * 60) {
-    return "Weekly";
+    return "w";
   }
   if (minutes <= 24 * 60) {
-    return `${Math.round(minutes / 60)}H`;
+    return `${Math.round(minutes / 60)}h`;
   }
   return `${Math.round(minutes / (24 * 60))}d`;
 }
 
-// Compact status-bar rate-limit segments, e.g. ["5H: 45%", "Weekly: 23%"]. Missing fields omit the segment.
+// Compact status-bar rate-limit segments, e.g. ["5h 45%", "w 23%"]. Missing fields omit the segment.
 function formatRateLimitsStatusBar(rateLimits) {
   if (!rateLimits) {
     return [];
@@ -154,7 +154,7 @@ function formatRateLimitsStatusBar(rateLimits) {
       ) {
         return null;
       }
-      return `${formatRateLimitShortLabel(limitWindow.window_minutes)}: ${Math.round(limitWindow.used_percent)}%`;
+      return `${formatRateLimitShortLabel(limitWindow.window_minutes)} ${Math.round(limitWindow.used_percent)}%`;
     })
     .filter(Boolean);
 }
