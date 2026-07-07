@@ -38,14 +38,20 @@ Current week (Fable): 15% used · resets Jul 14 at 1am (Asia/Shanghai)
   - 输出与 Codex `rateLimits` 同构:`{ primary?: { used_percent, window_minutes }, secondary?: ... }`;
     某行不匹配则省略对应窗口,两者皆无 → 返回 `null`。不解析 resets 时间(YAGNI,
     英文+时区解析脆弱);忽略模型专项行(如 `Current week (Fable)`)。
-- `resolveClaudeCliPath(configuredPath, existsSyncImpl = fs.existsSync)`:
-  返回第一个存在的候选:`configuredPath`(非空时)→ `~/.local/bin/claude` →
+- `resolveClaudeCliPath(configuredPath, existsSyncImpl = fs.existsSync, platform = process.platform, env = process.env)`:
+  返回第一个存在的候选。POSIX:`configuredPath`(非空时)→ `~/.local/bin/claude` →
   `/opt/homebrew/bin/claude` → `/usr/local/bin/claude` → 裸 `"claude"`(PATH 兜底)。
+  Windows(`win32`):`configuredPath` → `~\.local\bin\claude.exe`(原生安装器)→
+  `%APPDATA%\npm\claude.cmd`(npm 全局)→ 裸 `"claude"`。
   必要性:VS Code extension host 的 PATH 通常不含 shell profile 添加的目录,
-  本机 claude 即安装在 `~/.local/bin`。
-- `probeClaudeRateLimits(options)`:`options = { cliPath?, cwd?, timeoutMs?, execFileImpl? }`。
+  本机 claude 即安装在 `~/.local/bin`;Windows 上可执行名带 `.exe`/`.cmd` 后缀,
+  Unix 候选永不命中。
+- `probeClaudeRateLimits(options)`:`options = { cliPath?, cwd?, timeoutMs?, execFileImpl?, platform? }`。
   用 `child_process.execFile` 异步执行 `<cli> -p /usage`,默认 `timeoutMs: 30000`、
   `cwd: os.tmpdir()`(munged 后不匹配任何工作区,探测会话不干扰项目过滤)。
+  Windows 下 `.cmd`/`.bat` 及无路径分隔符的裸命令名走 `shell: true` 且路径加引号:
+  Node 修复 CVE-2024-27980 后无 shell spawn 批处理直接抛 `EINVAL`,且裸名需要
+  cmd.exe 的 PATHEXT 解析才能找到 npm 的 `claude.cmd`;`.exe` 与 POSIX 路径直接执行。
   返回 Promise:成功 resolve `parseUsageOutput(stdout)`,任何错误 resolve `null`
   (不 reject)。`execFileImpl` 供测试注入。
 

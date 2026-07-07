@@ -110,7 +110,7 @@ Codex-Claude-Monitor: Handoff
 | `agentTokenStatus.claudeRoot` | `~/.claude` | Optional absolute path to the Claude Code home directory. Leave empty to use the default. |
 | `agentTokenStatus.refreshIntervalMs` | `10000` | How often (in milliseconds, minimum `1000`) to re-read usage from local session files. |
 | `agentTokenStatus.claudeUsageProbeIntervalMs` | `300000` | How often to probe Claude subscription usage by running `claude -p "/usage"`. Minimum `60000`; set `0` to disable. |
-| `agentTokenStatus.claudeCliPath` | `""` | Optional absolute path to the `claude` CLI. Leave empty to auto-detect (`~/.local/bin`, Homebrew, `/usr/local/bin`, then `PATH`). |
+| `agentTokenStatus.claudeCliPath` | `""` | Optional absolute path to the `claude` CLI. Leave empty to auto-detect (`~/.local/bin`, Homebrew, `/usr/local/bin`, then `PATH`; on Windows: `~\.local\bin\claude.exe`, `%APPDATA%\npm\claude.cmd`, then `PATH`). |
 
 Changing any of these settings refreshes the status bar and restarts the refresh timer immediately.
 

@@ -71,7 +71,7 @@
         "agentTokenStatus.claudeCliPath": {
           "type": "string",
           "default": "",
-          "description": "Optional absolute path to the claude CLI. Leave empty to auto-detect (~/.local/bin, Homebrew, /usr/local/bin, then PATH)."
+          "description": "Optional absolute path to the claude CLI. Leave empty to auto-detect (~/.local/bin, Homebrew, /usr/local/bin, then PATH; on Windows: ~\\.local\\bin\\claude.exe, %APPDATA%\\npm\\claude.cmd, then PATH)."
         }
       }
     }
