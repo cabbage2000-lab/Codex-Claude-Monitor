@@ -275,3 +275,61 @@ test("formatClaudeTokenDetail renders composition and cache-hit rows", () => {
   assert.deepEqual(formatClaudeTokenDetail(undefined), []);
   assert.deepEqual(formatClaudeTokenDetail({ output_tokens: 5 }), []);
 });
+
+test("readLatestAgentUsage attaches claudeRateLimits when Claude wins", () => {
+  const codexRoot = makeTempDir();
+  const claudeRoot = makeTempDir();
+  const claudeFile = path.join(claudeRoot, "projects", "-workspace", "new.jsonl");
+  writeJsonl(claudeFile, [
+    {
+      type: "assistant",
+      timestamp: "2026-07-07T12:00:00Z",
+      message: {
+        model: "claude-opus-4-8",
+        usage: { input_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    },
+  ]);
+
+  const claudeRateLimits = {
+    primary: { used_percent: 25, window_minutes: 300 },
+    secondary: { used_percent: 8, window_minutes: 10080 },
+  };
+  const usage = readLatestAgentUsage({
+    codexSessionsRoot: codexRoot,
+    claudeRoot,
+    claudeRateLimits,
+  });
+
+  assert.equal(usage.provider, "Claude");
+  assert.deepEqual(usage.rateLimits, claudeRateLimits);
+  assert.match(formatAgentUsage(usage).text, /^Claude ⚡ \d+% · 5h 25% · w 8%$/);
+});
+
+test("readLatestAgentUsage does not attach claudeRateLimits to Codex", () => {
+  const codexRoot = makeTempDir();
+  const claudeRoot = makeTempDir();
+  const codexFile = path.join(codexRoot, "2026", "07", "07", "rollout-x.jsonl");
+  writeJsonl(codexFile, [
+    {
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          total_token_usage: { total_tokens: 1000 },
+          last_token_usage: { input_tokens: 500 },
+          model_context_window: 10000,
+        },
+      },
+    },
+  ]);
+
+  const usage = readLatestAgentUsage({
+    codexSessionsRoot: codexRoot,
+    claudeRoot,
+    claudeRateLimits: { primary: { used_percent: 25, window_minutes: 300 } },
+  });
+
+  assert.equal(usage.provider, "Codex");
+  assert.deepEqual(usage.rateLimits, {});
+});

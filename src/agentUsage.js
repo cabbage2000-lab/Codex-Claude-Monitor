@@ -14,7 +14,13 @@ function readLatestAgentUsage(options = {}) {
     return null;
   }
 
-  return candidates.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+  const usage = candidates.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+  // Claude JSONL carries no rate-limit data; attach the probed value from the caller.
+  // Never overwrite provider-supplied rateLimits (future-proofing).
+  if (usage.provider === "Claude" && options.claudeRateLimits && !usage.rateLimits) {
+    usage.rateLimits = options.claudeRateLimits;
+  }
+  return usage;
 }
 
 function formatCount(value) {
