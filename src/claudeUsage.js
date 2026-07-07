@@ -59,7 +59,8 @@ function findLatestClaudeSessionFile(claudeRoot = getDefaultClaudeRoot(), worksp
 
 function inferClaudeContextWindow(model) {
   const value = String(model || "").toLowerCase();
-  if (value.includes("1m") || /claude-opus-4-[78]/.test(value)) {
+  // Fable (Mythos-class) models report a 1M window (confirmed via /context, 2026-07).
+  if (value.includes("1m") || value.includes("fable") || /claude-opus-4-[78]/.test(value)) {
     return 1000000;
   }
   return 200000;

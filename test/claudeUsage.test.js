@@ -52,9 +52,11 @@ test("readLatestClaudeUsage extracts context tokens from the last assistant usag
   assert.equal(usage.updatedAt, new Date("2026-06-03T10:00:00.000Z").getTime());
 });
 
-test("inferClaudeContextWindow uses 1m for Opus 4.8 and 200k fallback otherwise", () => {
+test("inferClaudeContextWindow uses 1m for Opus 4.8, Fable, and 200k fallback otherwise", () => {
   assert.equal(inferClaudeContextWindow("claude-opus-4-8"), 1000000);
   assert.equal(inferClaudeContextWindow("claude-opus-4-7"), 1000000);
+  // Confirmed via /context on 2026-07-07: claude-fable-5 reports 201.8k/1m.
+  assert.equal(inferClaudeContextWindow("claude-fable-5"), 1000000);
   assert.equal(inferClaudeContextWindow("claude-sonnet-4"), 200000);
 });
 
