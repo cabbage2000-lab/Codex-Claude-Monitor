@@ -56,3 +56,38 @@ test("resolveClaudeCliPath prefers configured path, then known locations, then P
   );
   assert.equal(resolveClaudeCliPath("", () => false), "claude");
 });
+
+test("probeClaudeRateLimits parses stdout from the injected exec", async () => {
+  const calls = [];
+  const fakeExec = (file, args, options, callback) => {
+    calls.push({ file, args, options });
+    callback(null, REAL_OUTPUT, "");
+  };
+  const result = await probeClaudeRateLimits({
+    cliPath: "/fake/claude",
+    execFileImpl: fakeExec,
+  });
+  assert.deepEqual(result, {
+    primary: { used_percent: 25, window_minutes: 300 },
+    secondary: { used_percent: 8, window_minutes: 10080 },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].file, "/fake/claude");
+  assert.deepEqual(calls[0].args, ["-p", "/usage"]);
+  assert.equal(calls[0].options.timeout, 30000);
+  assert.ok(calls[0].options.cwd);
+});
+
+test("probeClaudeRateLimits resolves null on exec error", async () => {
+  const fakeExec = (file, args, options, callback) => {
+    callback(new Error("ENOENT"), "", "");
+  };
+  assert.equal(await probeClaudeRateLimits({ execFileImpl: fakeExec }), null);
+});
+
+test("probeClaudeRateLimits resolves null on unparseable stdout", async () => {
+  const fakeExec = (file, args, options, callback) => {
+    callback(null, "unexpected", "");
+  };
+  assert.equal(await probeClaudeRateLimits({ execFileImpl: fakeExec }), null);
+});

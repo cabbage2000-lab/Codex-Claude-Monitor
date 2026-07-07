@@ -1,3 +1,4 @@
+const { execFile } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -39,7 +40,30 @@ function resolveClaudeCliPath(configuredPath, existsSyncImpl = fs.existsSync) {
   return "claude";
 }
 
+// Run `claude -p "/usage"` and parse its output. Resolves null on any failure
+// (missing CLI, timeout, unparseable output) so callers keep the previous value.
+// cwd defaults to the OS temp dir so the probe session never matches a workspace.
+function probeClaudeRateLimits(options = {}) {
+  const execFileImpl = options.execFileImpl || execFile;
+  const cliPath = options.cliPath || resolveClaudeCliPath("");
+  return new Promise((resolve) => {
+    execFileImpl(
+      cliPath,
+      ["-p", "/usage"],
+      {
+        timeout: options.timeoutMs || 30000,
+        cwd: options.cwd || os.tmpdir(),
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        resolve(error ? null : parseUsageOutput(String(stdout)));
+      },
+    );
+  });
+}
+
 module.exports = {
   parseUsageOutput,
+  probeClaudeRateLimits,
   resolveClaudeCliPath,
 };
