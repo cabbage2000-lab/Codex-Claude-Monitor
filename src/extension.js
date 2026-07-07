@@ -6,9 +6,16 @@ const {
 const { buildHandoffPrompt, collectGitInfo } = require("./handoff");
 const { getDefaultSessionsRoot } = require("./codexUsage");
 const { getDefaultClaudeRoot } = require("./claudeUsage");
+const { probeClaudeRateLimits, resolveClaudeCliPath } = require("./claudeRateLimits");
 
 // Settings that should trigger a refresh when changed, without the agentTokenStatus prefix.
-const WATCHED_SETTINGS = ["sessionsRoot", "claudeRoot", "refreshIntervalMs"];
+const WATCHED_SETTINGS = [
+  "sessionsRoot",
+  "claudeRoot",
+  "refreshIntervalMs",
+  "claudeUsageProbeIntervalMs",
+  "claudeCliPath",
+];
 
 // Usage severity to status bar theme color. Theme colors adapt to light and dark themes.
 const SEVERITY_COLORS = {
@@ -20,10 +27,15 @@ const SEVERITY_COLORS = {
 // Context percent above which the handoff entry appears in the status bar.
 const HANDOFF_THRESHOLD = 50;
 
+const DEFAULT_PROBE_INTERVAL_MS = 300000;
+const MIN_PROBE_INTERVAL_MS = 60000;
+
 let statusItem;
 let handoffItem;
 let refreshTimer;
+let probeTimer;
 let latestUsage = null;
+let latestClaudeRateLimits = null;
 
 function getConfiguredPath(key, getDefault) {
   const configured = vscode.workspace
@@ -39,6 +51,43 @@ function getRefreshIntervalMs() {
   return Math.max(1000, Number(configured) || 10000);
 }
 
+// <= 0 disables probing; positive values are clamped to at least 1 minute so a
+// mis-set config cannot spawn `claude` processes in a tight loop.
+function getProbeIntervalMs() {
+  const configured = vscode.workspace
+    .getConfiguration("agentTokenStatus")
+    .get("claudeUsageProbeIntervalMs", DEFAULT_PROBE_INTERVAL_MS);
+  const value = Number(configured);
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.max(MIN_PROBE_INTERVAL_MS, value);
+}
+
+// Probe failures keep the previous value: subscription usage moves slowly, so a
+// slightly stale percent beats a flickering status bar segment.
+async function probeClaude() {
+  const configuredCliPath = vscode.workspace
+    .getConfiguration("agentTokenStatus")
+    .get("claudeCliPath", "");
+  const result = await probeClaudeRateLimits({
+    cliPath: resolveClaudeCliPath(configuredCliPath),
+  });
+  if (result) {
+    latestClaudeRateLimits = result;
+    refreshStatus();
+  }
+}
+
+function startProbeTimer() {
+  clearInterval(probeTimer);
+  const interval = getProbeIntervalMs();
+  if (interval <= 0) {
+    return;
+  }
+  probeTimer = setInterval(probeClaude, interval);
+}
+
 function getWorkspaceFolders() {
   return (vscode.workspace.workspaceFolders || [])
     .map((folder) => folder.uri && folder.uri.fsPath)
@@ -50,6 +99,7 @@ function readUsage() {
     codexSessionsRoot: getConfiguredPath("sessionsRoot", getDefaultSessionsRoot),
     claudeRoot: getConfiguredPath("claudeRoot", getDefaultClaudeRoot),
     workspaceFolders: getWorkspaceFolders(),
+    claudeRateLimits: latestClaudeRateLimits,
   });
 }
 
@@ -130,7 +180,12 @@ function activate(context) {
   handoffItem.command = "agentTokenStatus.handoff";
   context.subscriptions.push(handoffItem);
 
-  context.subscriptions.push({ dispose: () => clearInterval(refreshTimer) });
+  context.subscriptions.push({
+    dispose: () => {
+      clearInterval(refreshTimer);
+      clearInterval(probeTimer);
+    },
+  });
 
   context.subscriptions.push(
     vscode.commands.registerCommand("agentTokenStatus.refresh", () => {
@@ -155,6 +210,7 @@ function activate(context) {
       if (WATCHED_SETTINGS.some((key) => event.affectsConfiguration(`agentTokenStatus.${key}`))) {
         refreshStatus();
         startRefreshTimer();
+        startProbeTimer();
       }
     }),
   );
@@ -167,10 +223,15 @@ function activate(context) {
 
   refreshStatus();
   startRefreshTimer();
+  if (getProbeIntervalMs() > 0) {
+    probeClaude();
+  }
+  startProbeTimer();
 }
 
 function deactivate() {
   clearInterval(refreshTimer);
+  clearInterval(probeTimer);
 }
 
 module.exports = {

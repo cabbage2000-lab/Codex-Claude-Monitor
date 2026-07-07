@@ -84,6 +84,12 @@ function loadExtension({ usage }) {
           collectGitInfo: () => ({ branch: "main", status: "", recentCommits: "abc x" }),
         };
       }
+      if (request === "./claudeRateLimits") {
+        return {
+          probeClaudeRateLimits: () => Promise.resolve(null),
+          resolveClaudeCliPath: () => "claude",
+        };
+      }
     }
     return originalLoad.call(this, request, parent);
   };
