@@ -57,3 +57,32 @@ test("inferClaudeContextWindow uses 1m for Opus 4.8 and 200k fallback otherwise"
   assert.equal(inferClaudeContextWindow("claude-opus-4-7"), 1000000);
   assert.equal(inferClaudeContextWindow("claude-sonnet-4"), 200000);
 });
+
+test("readLatestClaudeUsage falls back past files without assistant usage", () => {
+  const root = makeTempDir("codex-claude-monitor-claude-");
+  const probeFile = path.join(root, "projects", "-tmp-probe", "probe.jsonl");
+  const realFile = path.join(root, "projects", "-workspace", "real.jsonl");
+
+  // Newest file: a `claude -p "/usage"` probe session with no assistant entry.
+  writeJsonl(probeFile, [
+    { type: "user", message: { content: "/usage" } },
+    { type: "system", subtype: "usage" },
+  ]);
+  writeJsonl(realFile, [
+    {
+      type: "assistant",
+      timestamp: "2026-07-07T10:00:00Z",
+      message: {
+        model: "claude-opus-4-8",
+        usage: { input_tokens: 5, cache_read_input_tokens: 995, cache_creation_input_tokens: 0 },
+      },
+    },
+  ]);
+  setMtime(realFile, new Date("2026-07-07T10:00:00Z"));
+  setMtime(probeFile, new Date("2026-07-07T11:00:00Z"));
+
+  const usage = readLatestClaudeUsage(root);
+  assert.ok(usage, "should fall back to the older file with assistant usage");
+  assert.equal(usage.sessionFile, realFile);
+  assert.equal(usage.contextTokens, 1000);
+});

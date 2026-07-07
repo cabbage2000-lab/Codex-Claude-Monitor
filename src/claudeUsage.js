@@ -39,18 +39,22 @@ function listMatchingProjectDirs(projectsRoot, workspaceFolders) {
     .map((name) => path.join(projectsRoot, name));
 }
 
-function findLatestClaudeSessionFile(claudeRoot = getDefaultClaudeRoot(), workspaceFolders = []) {
+// Probe sessions (`claude -p "/usage"`) and freshly started sessions have no assistant
+// entry yet; callers try a few newest files instead of only the very newest.
+const MAX_SESSION_FILE_CANDIDATES = 10;
+
+function listClaudeSessionFilesByMtime(claudeRoot = getDefaultClaudeRoot(), workspaceFolders = []) {
   const projectsRoot = path.join(claudeRoot, "projects");
   const filterByWorkspace = Array.isArray(workspaceFolders) && workspaceFolders.length > 0;
   const roots = filterByWorkspace
     ? listMatchingProjectDirs(projectsRoot, workspaceFolders)
     : [projectsRoot];
   const files = roots.flatMap((root) => walkFiles(root, (name) => name.endsWith(".jsonl")));
-  if (files.length === 0) {
-    return null;
-  }
+  return sortByMtimeDesc(files);
+}
 
-  return sortByMtimeDesc(files)[0];
+function findLatestClaudeSessionFile(claudeRoot = getDefaultClaudeRoot(), workspaceFolders = []) {
+  return listClaudeSessionFilesByMtime(claudeRoot, workspaceFolders)[0] || null;
 }
 
 function inferClaudeContextWindow(model) {
@@ -90,25 +94,32 @@ function readLastClaudeUsageEvent(sessionFile) {
 }
 
 function readLatestClaudeUsage(claudeRoot = getDefaultClaudeRoot(), workspaceFolders = []) {
-  const sessionFile = findLatestClaudeSessionFile(claudeRoot, workspaceFolders);
-  const event = readLastClaudeUsageEvent(sessionFile);
-  if (!event) {
-    return null;
+  const candidates = listClaudeSessionFilesByMtime(claudeRoot, workspaceFolders).slice(
+    0,
+    MAX_SESSION_FILE_CANDIDATES,
+  );
+
+  for (const sessionFile of candidates) {
+    const event = readLastClaudeUsageEvent(sessionFile);
+    if (!event) {
+      continue;
+    }
+    const contextTokens = getUsageContextTokens(event.usage);
+    const contextWindow = inferClaudeContextWindow(event.model);
+    return {
+      provider: "Claude",
+      sessionFile,
+      updatedAt: event.timestamp
+        ? new Date(event.timestamp).getTime()
+        : fs.statSync(sessionFile).mtimeMs,
+      model: event.model,
+      contextTokens,
+      contextWindow,
+      contextPercent: calculateContextPercent(contextTokens, contextWindow),
+      usage: event.usage,
+    };
   }
-
-  const contextTokens = getUsageContextTokens(event.usage);
-  const contextWindow = inferClaudeContextWindow(event.model);
-
-  return {
-    provider: "Claude",
-    sessionFile,
-    updatedAt: event.timestamp ? new Date(event.timestamp).getTime() : fs.statSync(sessionFile).mtimeMs,
-    model: event.model,
-    contextTokens,
-    contextWindow,
-    contextPercent: calculateContextPercent(contextTokens, contextWindow),
-    usage: event.usage,
-  };
+  return null;
 }
 
 module.exports = {
