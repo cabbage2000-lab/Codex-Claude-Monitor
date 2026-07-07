@@ -60,6 +60,15 @@ test("inferClaudeContextWindow uses 1m for Opus 4.8, Fable, and 200k fallback ot
   assert.equal(inferClaudeContextWindow("claude-sonnet-4"), 200000);
 });
 
+test("inferClaudeContextWindow upgrades to 1m when observed tokens exceed the inferred window", () => {
+  // Sessions observed above 200k prove a bigger window (e.g. Sonnet 5 at 620k).
+  assert.equal(inferClaudeContextWindow("claude-sonnet-5", 620803), 1000000);
+  assert.equal(inferClaudeContextWindow("glm-5.2", 332495), 1000000);
+  // Below the inferred window, the model-name inference stands.
+  assert.equal(inferClaudeContextWindow("claude-sonnet-4-6", 69779), 200000);
+  assert.equal(inferClaudeContextWindow("claude-sonnet-5"), 200000);
+});
+
 test("readLatestClaudeUsage falls back past files without assistant usage", () => {
   const root = makeTempDir("codex-claude-monitor-claude-");
   const probeFile = path.join(root, "projects", "-tmp-probe", "probe.jsonl");

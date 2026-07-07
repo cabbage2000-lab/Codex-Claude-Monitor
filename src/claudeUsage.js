@@ -57,10 +57,15 @@ function findLatestClaudeSessionFile(claudeRoot = getDefaultClaudeRoot(), worksp
   return listClaudeSessionFilesByMtime(claudeRoot, workspaceFolders)[0] || null;
 }
 
-function inferClaudeContextWindow(model) {
+function inferClaudeContextWindow(model, contextTokens = 0) {
   const value = String(model || "").toLowerCase();
   // Fable (Mythos-class) models report a 1M window (confirmed via /context, 2026-07).
   if (value.includes("1m") || value.includes("fable") || /claude-opus-4-[78]/.test(value)) {
+    return 1000000;
+  }
+  // Observed tokens above the inferred window prove the window is bigger (e.g. Sonnet 5
+  // at 620k, GLM-5 at 332k); 1M is the best available approximation and beats >100% output.
+  if (contextTokens > 200000) {
     return 1000000;
   }
   return 200000;
@@ -106,7 +111,7 @@ function readLatestClaudeUsage(claudeRoot = getDefaultClaudeRoot(), workspaceFol
       continue;
     }
     const contextTokens = getUsageContextTokens(event.usage);
-    const contextWindow = inferClaudeContextWindow(event.model);
+    const contextWindow = inferClaudeContextWindow(event.model, contextTokens);
     return {
       provider: "Claude",
       sessionFile,

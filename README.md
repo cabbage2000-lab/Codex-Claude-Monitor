@@ -124,7 +124,7 @@ Data flows from local session JSONL files → provider parsers (with workspace f
 ~/.codex/sessions
 ```
 
-**Claude Code.** The extension recursively scans `~/.claude/projects` for `.jsonl` files, tries the newest ones (skipping files without an assistant entry, such as usage-probe sessions), and reads the last `type: "assistant"` entry that carries `message.usage`. The context window is inferred from the model name (model names containing `1m` or `fable`, or `claude-opus-4-7` / `claude-opus-4-8`, use 1M; everything else uses 200k). Workspace filtering uses Claude's munged directory names, so files don't even need to be open.
+**Claude Code.** The extension recursively scans `~/.claude/projects` for `.jsonl` files, tries the newest ones (skipping files without an assistant entry, such as usage-probe sessions), and reads the last `type: "assistant"` entry that carries `message.usage`. The context window is inferred from the model name (model names containing `1m` or `fable`, or `claude-opus-4-7` / `claude-opus-4-8`, use 1M; everything else uses 200k). If the observed context tokens already exceed the inferred window, the window upgrades to 1M so the percentage stays meaningful for unlisted big-window models. Workspace filtering uses Claude's munged directory names, so files don't even need to be open.
 
 ```text
 ~/.claude/projects
