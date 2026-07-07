@@ -28,11 +28,11 @@ The status bar shows compact text such as:
 
 ```text
 Codex ⚡ 13% · 5h 45% · w 23%
-Claude ⚡ 18%
+Claude ⚡ 18% · 5h 25% · w 8%
 ```
 
 - The leading label is the active provider, followed by the ⚡ lightning bolt and the context usage percentage.
-- Codex sessions append compact rate-limit segments: `5h 45%` is the 5-hour window and `w 23%` is the weekly window. Claude session files carry no rate-limit data, so those segments are omitted.
+- Both providers append compact rate-limit segments: `5h 45%` is the 5-hour window and `w 23%` is the weekly window. Codex reads them from its session files. For Claude they are probed by periodically running `claude -p "/usage"` in the background (every 5 minutes by default, configurable via `agentTokenStatus.claudeUsageProbeIntervalMs`; set `0` to disable). Until the first successful probe, the Claude segments are omitted.
 - The friendly model name (e.g. `Opus 4.8`) and rate-limit reset times stay in the hover tooltip.
 - The item color reflects context-usage severity (green / yellow / red, see above).
 - Codex percentages come from `input_tokens / model_context_window` for the latest request.
@@ -109,6 +109,8 @@ Codex-Claude-Monitor: Handoff
 | `agentTokenStatus.sessionsRoot` | `~/.codex/sessions` | Optional absolute path to the Codex sessions directory. Leave empty to use the default. |
 | `agentTokenStatus.claudeRoot` | `~/.claude` | Optional absolute path to the Claude Code home directory. Leave empty to use the default. |
 | `agentTokenStatus.refreshIntervalMs` | `10000` | How often (in milliseconds, minimum `1000`) to re-read usage from local session files. |
+| `agentTokenStatus.claudeUsageProbeIntervalMs` | `300000` | How often to probe Claude subscription usage by running `claude -p "/usage"`. Minimum `60000`; set `0` to disable. |
+| `agentTokenStatus.claudeCliPath` | `""` | Optional absolute path to the `claude` CLI. Leave empty to auto-detect (`~/.local/bin`, Homebrew, `/usr/local/bin`, then `PATH`). |
 
 Changing any of these settings refreshes the status bar and restarts the refresh timer immediately.
 
@@ -122,7 +124,7 @@ Data flows from local session JSONL files → provider parsers (with workspace f
 ~/.codex/sessions
 ```
 
-**Claude Code.** The extension recursively scans `~/.claude/projects` for `.jsonl` files, picks the newest, and reads the last `type: "assistant"` entry that carries `message.usage`. The context window is inferred from the model name (model names containing `1m`, or `claude-opus-4-7` / `claude-opus-4-8`, use 1M; everything else uses 200k). Workspace filtering uses Claude's munged directory names, so files don't even need to be open.
+**Claude Code.** The extension recursively scans `~/.claude/projects` for `.jsonl` files, tries the newest ones (skipping files without an assistant entry, such as usage-probe sessions), and reads the last `type: "assistant"` entry that carries `message.usage`. The context window is inferred from the model name (model names containing `1m`, or `claude-opus-4-7` / `claude-opus-4-8`, use 1M; everything else uses 200k). Workspace filtering uses Claude's munged directory names, so files don't even need to be open.
 
 ```text
 ~/.claude/projects

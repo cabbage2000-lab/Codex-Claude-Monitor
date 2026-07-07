@@ -48,9 +48,10 @@ Workspace filtering is handled outside the VS Code entry point where possible. `
 
 - `src/sessionFiles.js`: shared provider utilities for recursive file scanning, mtime sorting, JSONL parsing, context percentage calculation, and cached last-matching-event reads.
 - `src/codexUsage.js`: scans `~/.codex/sessions` for `rollout-*.jsonl`, reads the latest `token_count` event, and uses `last_token_usage.input_tokens / model_context_window`.
-- `src/claudeUsage.js`: scans `~/.claude/projects` for `.jsonl`, reads the latest assistant `message.usage`, and infers the context window from the model name.
-- `src/agentUsage.js`: aggregation and formatting layer. It reads provider candidates, selects the most recent `updatedAt`, and formats status bar text (provider, context percent, and compact Codex rate-limit segments, e.g. `Codex ⚡ 3% · 5h 45% · w 23%`; Claude shows just `Claude ⚡ 9%`), tooltip text, usage severity (`low`/`medium`/`high`, used by `extension.js` for status bar coloring), model details, and Codex rate-limit rows. The friendly model name and rate-limit reset times are kept out of the status bar and surfaced only in the tooltip.
-- `src/extension.js`: the only file that depends on the `vscode` API. It owns the status bar item, refresh timer, configuration reads, workspace folder extraction, and `agentTokenStatus.refresh`.
+- `src/claudeUsage.js`: scans `~/.claude/projects` for `.jsonl`, reads the latest assistant `message.usage`, and infers the context window from the model name. Files without an assistant usage entry (e.g. probe sessions) are skipped, trying the newest 10 by mtime.
+- `src/claudeRateLimits.js`: probes Claude subscription usage by running `claude -p "/usage"` asynchronously and parsing the "Current session" / "Current week (all models)" lines into the Codex-shaped `rateLimits` object; resolves the CLI path across common install locations. Failures resolve `null`.
+- `src/agentUsage.js`: aggregation and formatting layer. It reads provider candidates, selects the most recent `updatedAt`, attaches probed `claudeRateLimits` when Claude wins, and formats status bar text (provider, context percent, and compact rate-limit segments, e.g. `Codex ⚡ 3% · 5h 45% · w 23%` or `Claude ⚡ 50% · 5h 25% · w 8%`), tooltip text, usage severity (`low`/`medium`/`high`, used by `extension.js` for status bar coloring), model details, and rate-limit rows. The friendly model name and rate-limit reset times are kept out of the status bar and surfaced only in the tooltip.
+- `src/extension.js`: the only file that depends on the `vscode` API. It owns the status bar item, refresh timer, the Claude usage probe timer (default 5 min, `claudeUsageProbeIntervalMs`, 0 disables), configuration reads, workspace folder extraction, and `agentTokenStatus.refresh`.
 
 Provider contract:
 
@@ -73,7 +74,7 @@ New providers should implement that shape and be added to the candidate list in 
 - Keep parsing and formatting logic independent from the `vscode` API so it can be tested with Node's built-in test runner.
 - Keep changes small and scoped to the requested behavior.
 - Do not introduce a build system, bundler, or dependency unless the task explicitly requires it.
-- Preserve public command ids and configuration keys such as `agentTokenStatus.refresh`, `agentTokenStatus.sessionsRoot`, `agentTokenStatus.claudeRoot`, and `agentTokenStatus.refreshIntervalMs`.
+- Preserve public command ids and configuration keys such as `agentTokenStatus.refresh`, `agentTokenStatus.sessionsRoot`, `agentTokenStatus.claudeRoot`, `agentTokenStatus.refreshIntervalMs`, `agentTokenStatus.claudeUsageProbeIntervalMs`, and `agentTokenStatus.claudeCliPath`.
 - When adding support for new Claude model context windows, update `inferClaudeContextWindow` in `src/claudeUsage.js`.
 - Test fixtures should use `test/testUtils.js` helpers such as `makeTempDir`, `writeJsonl`, and `setMtime`.
 
