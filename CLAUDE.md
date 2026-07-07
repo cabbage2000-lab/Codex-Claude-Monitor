@@ -14,6 +14,9 @@ npm test
 
 # Run one test file.
 node --test test/claudeUsage.test.js
+
+# Package the extension into dist/*.vsix (fetches @vscode/vsce via npx).
+npm run package
 ```
 
 For local installation, symlink the project directory to `~/.vscode/extensions/codex-claude-monitor`, then run `Developer: Reload Window` in VS Code. See `README.md`.
