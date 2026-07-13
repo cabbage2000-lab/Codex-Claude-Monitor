@@ -8,6 +8,7 @@ const {
   formatModelName,
   formatRateLimits,
   formatRateLimitsStatusBar,
+  formatTimeLeft,
   getUsageSeverity,
   readLatestAgentUsage,
 } = require("../src/agentUsage");
@@ -134,9 +135,53 @@ test("formatRateLimits formats 5h and weekly windows with reset times", () => {
   );
 
   assert.deepEqual(lines, [
-    "5h usage: 21% · Reset at 14:32",
-    "Weekly usage: 10% · Reset at 6/8 09:24",
+    "5h usage: 21% · Reset at 14:32 (in 2h 32m)",
+    "Weekly usage: 10% · Reset at 6/8 09:24 (in 4d 21h)",
   ]);
+});
+
+// The fixture dates sit in early June / early July, away from any DST switch, so
+// the relative durations stay deterministic across time zones.
+test("formatTimeLeft renders compact countdowns and rejects past times", () => {
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+  const at = (seconds) => now / 1000 + seconds;
+
+  assert.equal(formatTimeLeft(at(30), now), "1m");
+  assert.equal(formatTimeLeft(at(59 * 60 + 30), now), "1h");
+  assert.equal(formatTimeLeft(at(60 * 60), now), "1h");
+  assert.equal(formatTimeLeft(at(2 * 3600 + 13 * 60), now), "2h 13m");
+  assert.equal(formatTimeLeft(at(24 * 3600), now), "1d");
+  // The day scale keeps at most two units: leftover minutes are dropped.
+  assert.equal(formatTimeLeft(at(24 * 3600 + 25 * 60), now), "1d");
+  assert.equal(formatTimeLeft(at(4 * 86400 + 21 * 3600 + 24 * 60), now), "4d 21h");
+  assert.equal(formatTimeLeft(at(7 * 86400), now), "7d");
+
+  assert.equal(formatTimeLeft(at(0), now), null);
+  assert.equal(formatTimeLeft(at(-60), now), null);
+  assert.equal(formatTimeLeft(undefined, now), null);
+  assert.equal(formatTimeLeft(NaN, now), null);
+  assert.equal(formatTimeLeft("soon", now), null);
+});
+
+test("formatRateLimits keeps the absolute reset time without countdown once passed", () => {
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+  const pastReset = Math.floor(new Date(2026, 5, 3, 11, 59).getTime() / 1000);
+
+  assert.deepEqual(
+    formatRateLimits(
+      { primary: { used_percent: 21, window_minutes: 300, resets_at: pastReset } },
+      now,
+    ),
+    ["5h usage: 21% · Reset at 11:59"],
+  );
+  // A reset exactly at `now` also omits the countdown.
+  assert.deepEqual(
+    formatRateLimits(
+      { primary: { used_percent: 21, window_minutes: 300, resets_at: now / 1000 } },
+      now,
+    ),
+    ["5h usage: 21% · Reset at 12:00"],
+  );
 });
 
 test("formatRateLimits omits invalid windows and missing reset times", () => {
@@ -218,8 +263,46 @@ test("formatAgentUsage shows compact Codex rate limits in the status bar", () =>
     formatted.tooltip,
     [
       "Codex: ctx 8k / 258k (3%)",
-      "5h usage: 21% · Reset at 14:32",
-      "Weekly usage: 10% · Reset at 6/8 09:24",
+      "5h usage: 21% · Reset at 14:32 (in 2h 32m)",
+      "Weekly usage: 10% · Reset at 6/8 09:24 (in 4d 21h)",
+    ].join("\n"),
+  );
+});
+
+test("formatAgentUsage appends countdown rows for Claude probe rate limits", () => {
+  const now = new Date(2026, 6, 7, 12, 0).getTime();
+  const sessionReset = Math.floor(new Date(2026, 6, 7, 20, 20).getTime() / 1000);
+  const weekReset = Math.floor(new Date(2026, 6, 14, 1, 0).getTime() / 1000);
+
+  const formatted = formatAgentUsage(
+    {
+      provider: "Claude",
+      model: "claude-opus-4-8",
+      contextTokens: 185000,
+      contextWindow: 1000000,
+      contextPercent: 18,
+      usage: {
+        input_tokens: 2,
+        cache_read_input_tokens: 185000,
+        cache_creation_input_tokens: 155,
+      },
+      rateLimits: {
+        primary: { used_percent: 25, window_minutes: 300, resets_at: sessionReset },
+        secondary: { used_percent: 8, window_minutes: 10080, resets_at: weekReset },
+      },
+    },
+    now,
+  );
+
+  assert.equal(
+    formatted.tooltip,
+    [
+      "Claude: ctx 185k / 1m (18%)",
+      "Model: Opus 4.8 (1M context)",
+      "Tokens: input 2 · cache read 185k · cache create 155",
+      "Cache hit: 100%",
+      "5h usage: 25% · Reset at 20:20 (in 8h 20m)",
+      "Weekly usage: 8% · Reset at 7/14 01:00 (in 6d 13h)",
     ].join("\n"),
   );
 });

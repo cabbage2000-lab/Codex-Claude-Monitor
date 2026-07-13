@@ -8,7 +8,9 @@ const {
   resolveClaudeCliPath,
 } = require("../src/claudeRateLimits");
 
-// Real output captured from `claude -p "/usage"` (Claude Code 2.1.202).
+// Real output captured from `claude -p "/usage"` (Claude Code 2.1.202; 2.1.207
+// output has the same shape). Covers both reset-time forms: with minutes
+// ("8:20pm") and without ("1am").
 const REAL_OUTPUT = [
   "You are currently using your subscription to power your Claude Code usage",
   "",
@@ -19,10 +21,68 @@ const REAL_OUTPUT = [
   "What's contributing to your limits usage?",
 ].join("\n");
 
-test("parseUsageOutput extracts 5h and weekly windows from real output", () => {
-  assert.deepEqual(parseUsageOutput(REAL_OUTPUT), {
-    primary: { used_percent: 25, window_minutes: 300 },
-    secondary: { used_percent: 8, window_minutes: 10080 },
+// Same week as the Jul 7 / Jul 14 resets in REAL_OUTPUT. Local time construction
+// keeps the assertions deterministic across time zones.
+const NOW = new Date(2026, 6, 7, 12, 0).getTime();
+const SESSION_RESETS_AT = Math.floor(new Date(2026, 6, 7, 20, 20).getTime() / 1000);
+const WEEK_RESETS_AT = Math.floor(new Date(2026, 6, 14, 1, 0).getTime() / 1000);
+
+test("parseUsageOutput extracts 5h and weekly windows with reset times", () => {
+  assert.deepEqual(parseUsageOutput(REAL_OUTPUT, NOW), {
+    primary: { used_percent: 25, window_minutes: 300, resets_at: SESSION_RESETS_AT },
+    secondary: { used_percent: 8, window_minutes: 10080, resets_at: WEEK_RESETS_AT },
+  });
+});
+
+test("parseUsageOutput handles 12-hour clock edges", () => {
+  const resetsAt = (line) => parseUsageOutput(line, NOW).primary.resets_at;
+
+  assert.equal(
+    resetsAt("Current session: 5% used · resets Jul 14 at 12am (Asia/Shanghai)"),
+    Math.floor(new Date(2026, 6, 14, 0, 0).getTime() / 1000),
+  );
+  assert.equal(
+    resetsAt("Current session: 5% used · resets Jul 14 at 12pm (Asia/Shanghai)"),
+    Math.floor(new Date(2026, 6, 14, 12, 0).getTime() / 1000),
+  );
+  assert.equal(
+    resetsAt("Current session: 5% used · resets Jul 14 at 12:59am (Asia/Shanghai)"),
+    Math.floor(new Date(2026, 6, 14, 0, 59).getTime() / 1000),
+  );
+  // The zone suffix is ignored: the wall clock is always parsed as local time.
+  assert.equal(
+    resetsAt("Current session: 5% used · resets Jul 14 at 1am (America/New_York)"),
+    Math.floor(new Date(2026, 6, 14, 1, 0).getTime() / 1000),
+  );
+});
+
+test("parseUsageOutput infers the year across the New Year boundary", () => {
+  const decemberNow = new Date(2026, 11, 30, 12, 0).getTime();
+  const forward = parseUsageOutput(
+    "Current session: 5% used · resets Jan 2 at 1am (Asia/Shanghai)",
+    decemberNow,
+  );
+  assert.equal(forward.primary.resets_at, Math.floor(new Date(2027, 0, 2, 1, 0).getTime() / 1000));
+
+  // A just-passed reset in marginally stale output must stay in the past, not
+  // jump a year ahead (the nearest-year rule beats "current year, else +1").
+  const januaryNow = new Date(2027, 0, 1, 0, 30).getTime();
+  const backward = parseUsageOutput(
+    "Current session: 5% used · resets Dec 31 at 11:55pm (Asia/Shanghai)",
+    januaryNow,
+  );
+  assert.equal(
+    backward.primary.resets_at,
+    Math.floor(new Date(2026, 11, 31, 23, 55).getTime() / 1000),
+  );
+});
+
+test("parseUsageOutput omits resets_at when the reset text does not parse", () => {
+  assert.deepEqual(parseUsageOutput("Current session: 91% used · resets Xyz 5 at 1pm", NOW), {
+    primary: { used_percent: 91, window_minutes: 300 },
+  });
+  assert.deepEqual(parseUsageOutput("Current session: 91% used · resets tomorrow", NOW), {
+    primary: { used_percent: 91, window_minutes: 300 },
   });
 });
 
@@ -96,10 +156,14 @@ test("probeClaudeRateLimits parses stdout from the injected exec", async () => {
     cliPath: "/fake/claude",
     execFileImpl: fakeExec,
   });
-  assert.deepEqual(result, {
-    primary: { used_percent: 25, window_minutes: 300 },
-    secondary: { used_percent: 8, window_minutes: 10080 },
-  });
+  // The probe parses with the real current time, so resets_at depends on the test
+  // run date; assert the stable fields and the presence of the timestamps.
+  assert.equal(result.primary.used_percent, 25);
+  assert.equal(result.primary.window_minutes, 300);
+  assert.ok(Number.isFinite(result.primary.resets_at));
+  assert.equal(result.secondary.used_percent, 8);
+  assert.equal(result.secondary.window_minutes, 10080);
+  assert.ok(Number.isFinite(result.secondary.resets_at));
   assert.equal(calls.length, 1);
   assert.equal(calls[0].file, "/fake/claude");
   assert.deepEqual(calls[0].args, ["-p", "/usage"]);
@@ -122,10 +186,8 @@ test("probeClaudeRateLimits runs .cmd shims through a shell on Windows", async (
     platform: "win32",
     execFileImpl: fakeExec,
   });
-  assert.deepEqual(result, {
-    primary: { used_percent: 25, window_minutes: 300 },
-    secondary: { used_percent: 8, window_minutes: 10080 },
-  });
+  assert.equal(result.primary.used_percent, 25);
+  assert.equal(result.secondary.used_percent, 8);
   assert.equal(calls[0].file, `"${cmdPath}"`);
   assert.equal(calls[0].options.shell, true);
   assert.deepEqual(calls[0].args, ["-p", "/usage"]);
@@ -171,9 +233,9 @@ test("probeClaudeRateLimits runs .exe and POSIX paths directly", async () => {
 });
 
 test("parseUsageOutput handles CRLF output from Windows", () => {
-  assert.deepEqual(parseUsageOutput(REAL_OUTPUT.replace(/\n/g, "\r\n")), {
-    primary: { used_percent: 25, window_minutes: 300 },
-    secondary: { used_percent: 8, window_minutes: 10080 },
+  assert.deepEqual(parseUsageOutput(REAL_OUTPUT.replace(/\n/g, "\r\n"), NOW), {
+    primary: { used_percent: 25, window_minutes: 300, resets_at: SESSION_RESETS_AT },
+    secondary: { used_percent: 8, window_minutes: 10080, resets_at: WEEK_RESETS_AT },
   });
 });
 

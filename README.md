@@ -17,7 +17,7 @@ The extension reads local session files for both Codex and Claude Code, then dis
   - 🟡 yellow at 50–79%
   - 🔴 red at 80% and above
 - **Minimal, icon-based status bar** showing the active provider, context percentage, and (for Codex) compact 5h/weekly usage via codicon icons, so it stays compact and language-neutral.
-- **Detailed hover tooltip** with exact token counts, the friendly model name, Claude token composition and cache-hit rate, and Codex 5-hour / weekly rate-limit usage and reset times.
+- **Detailed hover tooltip** with exact token counts, the friendly model name, Claude token composition and cache-hit rate, and 5-hour / weekly rate-limit usage for both providers with the reset time and a relative countdown.
 - **Workspace-aware filtering** — only sessions whose working directory lives inside your current VS Code workspace are counted, so CLI sessions from other projects are ignored.
 - **Click to refresh** immediately, plus automatic refresh on a configurable interval.
 - **Handoff above 50%** — when context exceeds 50%, a `Handoff` entry appears beside the status bar. Click it to copy a compact continuation prompt (context %, session file, branch, plus a minimal Task/Done/Next/Constraints skeleton) to the clipboard, so a fresh session can pick up where this one left off.
@@ -33,17 +33,17 @@ Claude $(comment) 18% · $(history) 25% · $(calendar) 8%
 
 - The leading label is the active provider, followed by `$(comment)` (a speech-bubble icon marking the current session) and the context usage percentage.
 - Both providers append compact rate-limit segments using codicon icons: `$(history)` is the 5-hour window and `$(calendar)` is the weekly window. Codex reads them from its session files. For Claude they are probed by periodically running `claude -p "/usage"` in the background (every 5 minutes by default, configurable via `agentTokenStatus.claudeUsageProbeIntervalMs`; set `0` to disable). Until the first successful probe, the Claude segments are omitted. Icons replace letter abbreviations (`5h`/`w`) so the bar reads the same in any language.
-- The friendly model name (e.g. `Opus 4.8`) and rate-limit reset times stay in the hover tooltip.
+- The friendly model name (e.g. `Opus 4.8`) and rate-limit reset times (with a relative countdown) stay in the hover tooltip.
 - The item color reflects context-usage severity (green / yellow / red, see above).
 - Codex percentages come from `input_tokens / model_context_window` for the latest request.
 - Claude Code percentages come from `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, divided by the inferred context window.
 
-Hover the status bar item to see full detail. Codex shows 5-hour and weekly usage with reset times; Claude shows the friendly model name plus token composition and cache-hit rate:
+Hover the status bar item to see full detail. Both providers show 5-hour and weekly usage with the reset time and how long remains; Claude adds the friendly model name plus token composition and cache-hit rate:
 
 ```text
 Codex: ctx 136k / 258k (53%)
-5h usage: 21% · Reset at 14:32
-Weekly usage: 10% · Reset at 6/8 09:24
+5h usage: 21% · Reset at 14:32 (in 2h 32m)
+Weekly usage: 10% · Reset at 6/8 09:24 (in 4d 21h)
 ```
 
 ```text
@@ -51,7 +51,11 @@ Claude: ctx 36k / 1m (18%)
 Model: Opus 4.8 (1M context)
 Tokens: input 2 · cache read 36k · cache create 411
 Cache hit: 100%
+5h usage: 32% · Reset at 16:39 (in 38m)
+Weekly usage: 10% · Reset at 7/14 00:59 (in 8h 58m)
 ```
+
+Once a reset time has passed (stale session data), the countdown is omitted and only the absolute time remains.
 
 Click the status bar item to refresh immediately without opening a notification. Detailed usage always stays in the hover tooltip.
 

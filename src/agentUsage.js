@@ -102,6 +102,31 @@ function formatResetTime(resetsAtSeconds, now) {
   return sameDay ? time : `${resetDate.getMonth() + 1}/${resetDate.getDate()} ${time}`;
 }
 
+// Relative time until reset, e.g. "38m", "2h 13m", "4d 21h". Total minutes are
+// rounded up so the countdown never reads "0m"; at most two units, with a zero
+// minor unit omitted. Returns null when resets_at is invalid or not in the future.
+function formatTimeLeft(resetsAtSeconds, now) {
+  if (!Number.isFinite(resetsAtSeconds)) {
+    return null;
+  }
+  const deltaMs = resetsAtSeconds * 1000 - now;
+  if (deltaMs <= 0) {
+    return null;
+  }
+  const totalMinutes = Math.ceil(deltaMs / 60000);
+  if (totalMinutes >= 24 * 60) {
+    const days = Math.floor(totalMinutes / (24 * 60));
+    const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  return `${totalMinutes}m`;
+}
+
 // Convert one rate-limit window into a display row. Missing fields omit the row.
 function formatRateLimitWindow(limitWindow, now) {
   if (
@@ -122,7 +147,14 @@ function formatRateLimitWindow(limitWindow, now) {
   }
   const percent = `${Math.round(limitWindow.used_percent)}%`;
   const reset = formatResetTime(limitWindow.resets_at, now);
-  return reset ? `${label}: ${percent} · Reset at ${reset}` : `${label}: ${percent}`;
+  if (!reset) {
+    return `${label}: ${percent}`;
+  }
+  // A reset already in the past (stale session data) keeps the absolute time only.
+  const timeLeft = formatTimeLeft(limitWindow.resets_at, now);
+  return timeLeft
+    ? `${label}: ${percent} · Reset at ${reset} (in ${timeLeft})`
+    : `${label}: ${percent} · Reset at ${reset}`;
 }
 
 // Convert Codex rate_limits into tooltip rows. primary is usually 5h; secondary is weekly.
@@ -204,6 +236,7 @@ module.exports = {
   formatModelName,
   formatRateLimits,
   formatRateLimitsStatusBar,
+  formatTimeLeft,
   getUsageSeverity,
   readLatestAgentUsage,
 };
