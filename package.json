@@ -65,8 +65,8 @@
         },
         "agentTokenStatus.claudeUsageProbeIntervalMs": {
           "type": "number",
-          "default": 300000,
-          "description": "How often to probe Claude subscription usage by running `claude -p \"/usage\"`. Minimum 60000; set 0 to disable."
+          "default": 900000,
+          "description": "How often to probe Claude subscription usage by running `claude -p \"/usage\"`. Minimum 300000; set 0 to disable."
         },
         "agentTokenStatus.claudeCliPath": {
           "type": "string",

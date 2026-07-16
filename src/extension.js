@@ -27,8 +27,8 @@ const SEVERITY_COLORS = {
 // Context percent above which the handoff entry appears in the status bar.
 const HANDOFF_THRESHOLD = 50;
 
-const DEFAULT_PROBE_INTERVAL_MS = 300000;
-const MIN_PROBE_INTERVAL_MS = 60000;
+const DEFAULT_PROBE_INTERVAL_MS = 900000;
+const MIN_PROBE_INTERVAL_MS = 300000;
 
 let statusItem;
 let handoffItem;
@@ -51,8 +51,9 @@ function getRefreshIntervalMs() {
   return Math.max(1000, Number(configured) || 10000);
 }
 
-// <= 0 disables probing; positive values are clamped to at least 1 minute so a
-// mis-set config cannot spawn `claude` processes in a tight loop.
+// <= 0 disables probing; positive values are clamped to at least 5 minutes so a
+// mis-set config cannot spawn `claude` processes often enough to trip Anthropic's
+// rate limiting.
 function getProbeIntervalMs() {
   const configured = vscode.workspace
     .getConfiguration("agentTokenStatus")
