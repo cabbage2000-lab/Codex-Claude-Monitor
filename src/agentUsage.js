@@ -15,10 +15,14 @@ function readLatestAgentUsage(options = {}) {
   }
 
   const usage = candidates.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
-  // Claude JSONL carries no rate-limit data; attach the probed value from the caller.
-  // Never overwrite provider-supplied rateLimits (future-proofing).
+  // Claude JSONL carries no rate-limit data; attach the value read from the
+  // statusline cache by the caller. Never overwrite provider-supplied rateLimits
+  // (future-proofing). capturedAt rides along so the tooltip can note its age.
   if (usage.provider === "Claude" && options.claudeRateLimits && !usage.rateLimits) {
     usage.rateLimits = options.claudeRateLimits;
+    if (Number.isFinite(options.claudeRateLimitsCapturedAt)) {
+      usage.rateLimitsCapturedAt = options.claudeRateLimitsCapturedAt;
+    }
   }
   return usage;
 }
@@ -127,6 +131,38 @@ function formatTimeLeft(resetsAtSeconds, now) {
   return `${totalMinutes}m`;
 }
 
+// Relative elapsed time since a past timestamp, e.g. "just now", "2m ago",
+// "3h ago", "1d ago". Under a minute reads "just now"; a future timestamp (clock
+// skew) also reads "just now". At most one unit. Null for invalid input.
+function formatTimeAgo(sinceSeconds, now) {
+  if (!Number.isFinite(sinceSeconds)) {
+    return null;
+  }
+  const deltaMs = now - sinceSeconds * 1000;
+  if (deltaMs < 60000) {
+    return "just now";
+  }
+  const totalMinutes = Math.floor(deltaMs / 60000);
+  if (totalMinutes >= 24 * 60) {
+    return `${Math.floor(totalMinutes / (24 * 60))}d ago`;
+  }
+  if (totalMinutes >= 60) {
+    return `${Math.floor(totalMinutes / 60)}h ago`;
+  }
+  return `${totalMinutes}m ago`;
+}
+
+// Tooltip row noting when the statusline rate-limit snapshot was captured, e.g.
+// "Usage updated 2m ago (11:58)". Null when capturedAt is missing/invalid.
+function formatUsageCaptureRow(capturedAtSeconds, now) {
+  const ago = formatTimeAgo(capturedAtSeconds, now);
+  if (!ago) {
+    return null;
+  }
+  const at = formatResetTime(capturedAtSeconds, now);
+  return at ? `Usage updated ${ago} (${at})` : `Usage updated ${ago}`;
+}
+
 // Convert one rate-limit window into a display row. Missing fields omit the row.
 function formatRateLimitWindow(limitWindow, now) {
   if (
@@ -217,7 +253,15 @@ function formatAgentUsage(usage, now = Date.now()) {
     lines.push(`Model: ${modelDisplay}`);
   }
   lines.push(...formatClaudeTokenDetail(usage.usage));
-  lines.push(...formatRateLimits(usage.rateLimits, now));
+  const rateLimitRows = formatRateLimits(usage.rateLimits, now);
+  lines.push(...rateLimitRows);
+  // The capture-time row only makes sense next to statusline-sourced rate limits.
+  if (rateLimitRows.length > 0) {
+    const captureRow = formatUsageCaptureRow(usage.rateLimitsCapturedAt, now);
+    if (captureRow) {
+      lines.push(captureRow);
+    }
+  }
 
   const textParts = [`${provider} $(comment) ${contextPercent}`];
   textParts.push(...formatRateLimitsStatusBar(usage.rateLimits));
@@ -236,6 +280,7 @@ module.exports = {
   formatModelName,
   formatRateLimits,
   formatRateLimitsStatusBar,
+  formatTimeAgo,
   formatTimeLeft,
   getUsageSeverity,
   readLatestAgentUsage,

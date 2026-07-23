@@ -32,7 +32,7 @@ Claude $(comment) 18% · $(history) 25% · $(calendar) 8%
 ```
 
 - The leading label is the active provider, followed by `$(comment)` (a speech-bubble icon marking the current session) and the context usage percentage.
-- Both providers append compact rate-limit segments using codicon icons: `$(history)` is the 5-hour window and `$(calendar)` is the weekly window. Codex reads them from its session files. For Claude they are probed by periodically running `claude -p "/usage"` in the background (every 15 minutes by default, configurable via `agentTokenStatus.claudeUsageProbeIntervalMs`; set `0` to disable). Until the first successful probe, the Claude segments are omitted. Icons replace letter abbreviations (`5h`/`w`) so the bar reads the same in any language.
+- Both providers append compact rate-limit segments using codicon icons: `$(history)` is the 5-hour window and `$(calendar)` is the weekly window. Codex reads them from its session files. For Claude they come from the statusline usage cache written by `scripts/usage-cache.sh` (see [Claude subscription limits](#claude-subscription-limits) below). Until that cache exists, the Claude segments are omitted. Icons replace letter abbreviations (`5h`/`w`) so the bar reads the same in any language.
 - The friendly model name (e.g. `Opus 4.8`) and rate-limit reset times (with a relative countdown) stay in the hover tooltip.
 - The item color reflects context-usage severity (green / yellow / red, see above).
 - Codex percentages come from `input_tokens / model_context_window` for the latest request.
@@ -113,10 +113,39 @@ Codex-Claude-Monitor: Handoff
 | `agentTokenStatus.sessionsRoot` | `~/.codex/sessions` | Optional absolute path to the Codex sessions directory. Leave empty to use the default. |
 | `agentTokenStatus.claudeRoot` | `~/.claude` | Optional absolute path to the Claude Code home directory. Leave empty to use the default. |
 | `agentTokenStatus.refreshIntervalMs` | `10000` | How often (in milliseconds, minimum `1000`) to re-read usage from local session files. |
-| `agentTokenStatus.claudeUsageProbeIntervalMs` | `900000` | How often to probe Claude subscription usage by running `claude -p "/usage"`. Minimum `300000`; set `0` to disable. |
-| `agentTokenStatus.claudeCliPath` | `""` | Optional absolute path to the `claude` CLI. Leave empty to auto-detect (`~/.local/bin`, Homebrew, `/usr/local/bin`, then `PATH`; on Windows: `~\.local\bin\claude.exe`, `%APPDATA%\npm\claude.cmd`, then `PATH`). |
 
 Changing any of these settings refreshes the status bar and restarts the refresh timer immediately.
+
+## Claude subscription limits
+
+The Claude 5-hour and weekly rate-limit segments come from Claude Code's **status line** input, not from any CLI probe. Claude Code passes a JSON blob (including a `rate_limits` block for subscribers) on stdin to the configured status line command; the bundled helper `scripts/usage-cache.sh` snapshots that block to `~/.claude/.usage-cache.json`, and the extension reads it on each refresh.
+
+To enable the segments, pipe your status line input through the helper. If you have no status line yet, set one in `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": { "type": "command", "command": "~/.claude/statusline-command.sh" }
+}
+```
+
+Then in that script, pass stdin through the helper (adjust the path to where this extension lives):
+
+```bash
+#!/bin/bash
+input=$(cat)
+
+# Snapshot subscription rate limits for the status bar (background, best-effort).
+HELPER="$HOME/.vscode/extensions/codex-claude-monitor/scripts/usage-cache.sh"
+[ -x "$HELPER" ] && printf '%s' "$input" | "$HELPER" >/dev/null 2>&1 &
+
+# ... your existing status line rendering, reusing "$input" ...
+```
+
+Notes:
+
+- The `rate_limits` block is only present for Claude.ai subscribers, and only after the first API response of a session — so the segments appear once you have sent at least one message.
+- The cache updates only while a Claude Code session is running its status line. The tooltip shows a `Usage updated …` line so you can see how fresh the numbers are.
+- The helper never fails your status line: a missing `jq`, absent `rate_limits`, or unwritable directory just skips the snapshot.
 
 ## How It Works
 

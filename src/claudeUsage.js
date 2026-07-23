@@ -39,7 +39,7 @@ function listMatchingProjectDirs(projectsRoot, workspaceFolders) {
     .map((name) => path.join(projectsRoot, name));
 }
 
-// Probe sessions (`claude -p "/usage"`) and freshly started sessions have no assistant
+// Freshly started sessions and non-interactive `claude -p` sessions have no assistant
 // entry yet; callers try a few newest files instead of only the very newest.
 const MAX_SESSION_FILE_CANDIDATES = 10;
 

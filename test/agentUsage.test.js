@@ -8,6 +8,7 @@ const {
   formatModelName,
   formatRateLimits,
   formatRateLimitsStatusBar,
+  formatTimeAgo,
   formatTimeLeft,
   getUsageSeverity,
   readLatestAgentUsage,
@@ -321,6 +322,99 @@ test("formatAgentUsage keeps Claude model details in the tooltip only", () => {
     ["Claude: ctx 185k / 1m (18%)", "Model: Opus 4.8 (1M context)"].join("\n"),
   );
   assert.equal(formatted.text, "Claude $(comment) 18%");
+});
+
+test("formatTimeAgo renders compact elapsed time and rejects future/invalid values", () => {
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+  const ago = (seconds) => now / 1000 - seconds;
+
+  assert.equal(formatTimeAgo(ago(0), now), "just now");
+  assert.equal(formatTimeAgo(ago(30), now), "just now");
+  assert.equal(formatTimeAgo(ago(60), now), "1m ago");
+  assert.equal(formatTimeAgo(ago(2 * 60 + 30), now), "2m ago");
+  assert.equal(formatTimeAgo(ago(59 * 60), now), "59m ago");
+  assert.equal(formatTimeAgo(ago(60 * 60), now), "1h ago");
+  assert.equal(formatTimeAgo(ago(2 * 3600 + 40 * 60), now), "2h ago");
+  assert.equal(formatTimeAgo(ago(24 * 3600), now), "1d ago");
+  assert.equal(formatTimeAgo(ago(3 * 86400), now), "3d ago");
+
+  // A future timestamp (clock skew) reads as just now rather than negative.
+  assert.equal(formatTimeAgo(ago(-60), now), "just now");
+  assert.equal(formatTimeAgo(undefined, now), null);
+  assert.equal(formatTimeAgo(NaN, now), null);
+});
+
+test("formatAgentUsage appends a capture-time row for statusline rate limits", () => {
+  const now = new Date(2026, 6, 7, 12, 0).getTime();
+  const sessionReset = Math.floor(new Date(2026, 6, 7, 20, 20).getTime() / 1000);
+  const capturedAt = Math.floor(new Date(2026, 6, 7, 11, 58).getTime() / 1000);
+
+  const formatted = formatAgentUsage(
+    {
+      provider: "Claude",
+      model: "claude-opus-4-8",
+      contextTokens: 185000,
+      contextWindow: 1000000,
+      contextPercent: 18,
+      rateLimits: {
+        primary: { used_percent: 25, window_minutes: 300, resets_at: sessionReset },
+      },
+      rateLimitsCapturedAt: capturedAt,
+    },
+    now,
+  );
+
+  assert.equal(
+    formatted.tooltip,
+    [
+      "Claude: ctx 185k / 1m (18%)",
+      "Model: Opus 4.8 (1M context)",
+      "5h usage: 25% · Reset at 20:20 (in 8h 20m)",
+      "Usage updated 2m ago (11:58)",
+    ].join("\n"),
+  );
+});
+
+test("formatAgentUsage omits the capture-time row when there are no rate limits", () => {
+  const formatted = formatAgentUsage({
+    provider: "Claude",
+    model: "claude-opus-4-8",
+    contextTokens: 185000,
+    contextWindow: 1000000,
+    contextPercent: 18,
+    rateLimitsCapturedAt: 1780000000,
+  });
+
+  assert.equal(
+    formatted.tooltip,
+    ["Claude: ctx 185k / 1m (18%)", "Model: Opus 4.8 (1M context)"].join("\n"),
+  );
+});
+
+test("readLatestAgentUsage attaches capturedAt alongside Claude rate limits", () => {
+  const codexRoot = makeTempDir();
+  const claudeRoot = makeTempDir();
+  const claudeFile = path.join(claudeRoot, "projects", "-workspace", "new.jsonl");
+  writeJsonl(claudeFile, [
+    {
+      type: "assistant",
+      timestamp: "2026-07-07T12:00:00Z",
+      message: {
+        model: "claude-opus-4-8",
+        usage: { input_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    },
+  ]);
+
+  const usage = readLatestAgentUsage({
+    codexSessionsRoot: codexRoot,
+    claudeRoot,
+    claudeRateLimits: { primary: { used_percent: 25, window_minutes: 300 } },
+    claudeRateLimitsCapturedAt: 1780000000,
+  });
+
+  assert.equal(usage.provider, "Claude");
+  assert.equal(usage.rateLimitsCapturedAt, 1780000000);
 });
 
 test("formatModelName maps Claude model ids to friendly names and ignores others", () => {

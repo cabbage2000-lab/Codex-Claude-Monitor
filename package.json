@@ -62,16 +62,6 @@
           "default": 10000,
           "minimum": 1000,
           "description": "How often to refresh token usage from local agent session files."
-        },
-        "agentTokenStatus.claudeUsageProbeIntervalMs": {
-          "type": "number",
-          "default": 900000,
-          "description": "How often to probe Claude subscription usage by running `claude -p \"/usage\"`. Minimum 300000; set 0 to disable."
-        },
-        "agentTokenStatus.claudeCliPath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional absolute path to the claude CLI. Leave empty to auto-detect (~/.local/bin, Homebrew, /usr/local/bin, then PATH; on Windows: ~\\.local\\bin\\claude.exe, %APPDATA%\\npm\\claude.cmd, then PATH)."
         }
       }
     }
