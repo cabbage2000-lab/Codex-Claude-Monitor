@@ -19,6 +19,7 @@ const WATCHED_SETTINGS = [
   "claudeRoot",
   "refreshIntervalMs",
   "enableClaudeOAuthUsage",
+  "enableClaudeQuotaProbe",
 ];
 
 // Usage severity to status bar theme color. Theme colors adapt to light and dark themes.
@@ -56,10 +57,36 @@ function getWorkspaceFolders() {
     .filter(Boolean);
 }
 
+// The editor's own proxy setting, handed to the OAuth read as an override.
+// An editor launched from Finder or the Dock inherits no shell environment, so
+// `http_proxy` may be absent there even when the machine is behind a proxy —
+// and a direct connection to Anthropic is refused outright in some regions.
+function getConfiguredProxyUrl() {
+  const configured = vscode.workspace.getConfiguration("http").get("proxy");
+  return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
+}
+
 function isClaudeOAuthUsageEnabled() {
   return vscode.workspace
     .getConfiguration("agentTokenStatus")
     .get("enableClaudeOAuthUsage", true);
+}
+
+// Off by default: the probe spends tokens, so it is strictly opt-in.
+function isClaudeQuotaProbeEnabled() {
+  return vscode.workspace
+    .getConfiguration("agentTokenStatus")
+    .get("enableClaudeQuotaProbe", false);
+}
+
+// The quota probe costs a token, so only spend it when Claude is the provider
+// actually being displayed. Before the first read `latestUsage` is null and we
+// allow it, otherwise a Claude-only session would never get its limits.
+function shouldAllowQuotaProbe() {
+  if (!isClaudeQuotaProbeEnabled()) {
+    return false;
+  }
+  return !latestUsage || latestUsage.provider === "Claude";
 }
 
 function readUsage() {
@@ -92,6 +119,8 @@ function scheduleClaudeOAuthUsageRefresh(force) {
   refreshClaudeOAuthUsage({
     claudeRoot: getConfiguredPath("claudeRoot", getDefaultClaudeRoot),
     force,
+    allowQuotaProbe: shouldAllowQuotaProbe(),
+    proxy: getConfiguredProxyUrl(),
   })
     .then((snapshot) => {
       if (snapshot && statusItem) {

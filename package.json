@@ -66,7 +66,12 @@
         "agentTokenStatus.enableClaudeOAuthUsage": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Read Claude subscription rate limits directly from the OAuth usage endpoint, so they also work when Claude Code is used only through the VS Code panel (where the status line never runs). Uses the access token Claude Code already stored; the refresh token is never touched, and an expired token is skipped rather than refreshed. On macOS the first read may raise a Keychain authorization prompt. **Pro/Max subscriptions only** — the endpoint refuses `team` and `enterprise` accounts, and the extension then stops asking and falls back to the status line bridge (`scripts/usage-cache.sh`). Turn this off to skip the credential read entirely."
+          "markdownDescription": "Read Claude subscription rate limits directly from the OAuth usage endpoint, so they also work when Claude Code is used only through the VS Code panel (where the status line never runs). Uses the access token Claude Code already stored; the refresh token is never touched, and an expired token is skipped rather than refreshed. On macOS the first read may raise a Keychain authorization prompt. Requests follow `http_proxy` / `https_proxy` and the editor's own `http.proxy` setting, which matters because Anthropic refuses a direct connection from some regions with the very same `403` an unsupported account gets. A refused read enables `agentTokenStatus.enableClaudeQuotaProbe` below, but is always retried rather than written off. Turn this off to skip the credential read entirely."
+        },
+        "agentTokenStatus.enableClaudeQuotaProbe": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "When the OAuth usage endpoint is unavailable, fall back to reading the rate-limit **response headers**. This reproduces Claude Code's own `quota_check`: a minimal `/v1/messages` request with `max_tokens: 1` and the one-word prompt `quota`, made only to harvest the headers. Off by default because **it spends tokens** (roughly one output token plus a few input tokens per probe, at most one per 5 minutes, and only while Claude is the provider being displayed). Requires `enableClaudeOAuthUsage`, and only runs after the usage endpoint has actually refused a read. Probing stops for good only if a probe succeeds yet carries no rate-limit headers, which is a property of the plan rather than the network. See `docs/specs/2026-08-05-oauth-usage-source-design.md`."
         }
       }
     }

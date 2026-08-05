@@ -10,6 +10,7 @@ const {
   readClaudeOAuthUsage,
   refreshClaudeOAuthUsage,
   resetClaudeOAuthUsageState,
+  resolveProxyUrl,
 } = require("../src/claudeOAuthUsage");
 
 // Shape of the /api/oauth/usage payload: `utilization` is already 0-100 and
@@ -229,9 +230,12 @@ test("concurrent refreshes share a single in-flight request", async () => {
   assert.equal(calls.usageRequests, 1);
 });
 
-// A team or enterprise subscription is not served by this endpoint: it answers
-// 403 no matter how often we ask, so the module must stop asking entirely.
-test("a 403 marks the endpoint unsupported and stops all further attempts", async () => {
+// A 403 is ambiguous and must never be a permanent verdict. The endpoint
+// refusing an account is indistinguishable from Anthropic refusing the
+// connection: a direct request from certain regions gets the very same
+// `403 Request not allowed`. Giving up for good would mean a proxy coming up
+// later — or the user simply moving networks — never recovers.
+test("a 403 flags the refusal but still retries on the next interval", async () => {
   resetClaudeOAuthUsageState();
   const calls = { usageRequests: 0 };
   const deps = {
@@ -239,7 +243,7 @@ test("a 403 marks the endpoint unsupported and stops all further attempts", asyn
     requestUsage: async () => {
       calls.usageRequests += 1;
       const error = new Error("usage endpoint returned 403");
-      error.unsupported = true;
+      error.refused = true;
       throw error;
     },
   };
@@ -247,19 +251,106 @@ test("a 403 marks the endpoint unsupported and stops all further attempts", asyn
 
   await refreshClaudeOAuthUsage({ now, deps });
   assert.equal(calls.usageRequests, 1);
-  assert.equal(isClaudeOAuthUsageUnsupported(), true);
+  assert.equal(isClaudeOAuthUsageUnsupported(), true, "refusal is visible for diagnostics");
 
-  // Neither the timer nor an explicit forced refresh may retry.
-  await refreshClaudeOAuthUsage({ now: now + MIN_REFRESH_INTERVAL_MS * 10, deps });
-  await refreshClaudeOAuthUsage({ now: now + MIN_REFRESH_INTERVAL_MS * 20, force: true, deps });
-  assert.equal(calls.usageRequests, 1);
+  // Backoff applies, but the endpoint is asked again rather than written off.
+  await refreshClaudeOAuthUsage({ now: now + MIN_REFRESH_INTERVAL_MS * 3, deps });
+  assert.equal(calls.usageRequests, 2);
 });
 
-test("an ordinary failure does not mark the endpoint unsupported", async () => {
+test("a later success clears the refusal flag", async () => {
+  resetClaudeOAuthUsageState();
+  let refuse = true;
+  const deps = {
+    readAccessToken: async () => "at-123",
+    requestUsage: async () => {
+      if (refuse) {
+        const error = new Error("usage endpoint returned 403");
+        error.refused = true;
+        throw error;
+      }
+      return { five_hour: { utilization: 7 } };
+    },
+  };
+  const now = 10_000_000;
+
+  await refreshClaudeOAuthUsage({ now, deps });
+  assert.equal(isClaudeOAuthUsageUnsupported(), true);
+
+  refuse = false;
+  await refreshClaudeOAuthUsage({ now: now + MIN_REFRESH_INTERVAL_MS * 3, deps });
+  assert.equal(isClaudeOAuthUsageUnsupported(), false);
+  assert.equal(readClaudeOAuthUsage().rateLimits.primary.used_percent, 7);
+});
+
+test("an ordinary failure does not flag a refusal", async () => {
   resetClaudeOAuthUsageState();
   const { deps } = makeDeps({ fail: true });
 
   await refreshClaudeOAuthUsage({ now: 10_000_000, deps });
 
   assert.equal(isClaudeOAuthUsageUnsupported(), false);
+});
+
+// node:https ignores the proxy environment entirely, so resolving it here is
+// the only reason a proxied machine can reach the endpoint at all.
+test("resolves the proxy from the environment, scheme-specific first", () => {
+  assert.equal(
+    resolveProxyUrl("api.anthropic.com", undefined, {
+      https_proxy: "http://127.0.0.1:7897",
+      http_proxy: "http://127.0.0.1:1111",
+    }).href,
+    "http://127.0.0.1:7897/",
+  );
+  assert.equal(
+    resolveProxyUrl("api.anthropic.com", undefined, { HTTP_PROXY: "http://127.0.0.1:1111" }).href,
+    "http://127.0.0.1:1111/",
+  );
+  assert.equal(resolveProxyUrl("api.anthropic.com", undefined, {}), null);
+});
+
+test("an explicit override outranks the environment", () => {
+  assert.equal(
+    resolveProxyUrl("api.anthropic.com", "http://proxy.local:8080", {
+      https_proxy: "http://127.0.0.1:7897",
+    }).href,
+    "http://proxy.local:8080/",
+  );
+});
+
+test("accepts a bare host:port the way curl does", () => {
+  assert.equal(
+    resolveProxyUrl("api.anthropic.com", undefined, { https_proxy: "127.0.0.1:7897" }).href,
+    "http://127.0.0.1:7897/",
+  );
+});
+
+test("honours no_proxy, including for an explicit override", () => {
+  const env = { https_proxy: "http://127.0.0.1:7897", no_proxy: "localhost,127.0.0.1,.internal" };
+  assert.equal(resolveProxyUrl("localhost", undefined, env), null);
+  assert.equal(resolveProxyUrl("127.0.0.1", undefined, env), null);
+  assert.equal(resolveProxyUrl("gw.internal", undefined, env), null);
+  assert.equal(resolveProxyUrl("localhost", "http://proxy.local:8080", env), null);
+  // A suffix entry must not match a host that merely ends with the same text.
+  assert.equal(resolveProxyUrl("notinternal", undefined, env).href, "http://127.0.0.1:7897/");
+  assert.equal(resolveProxyUrl("api.anthropic.com", undefined, env).href, "http://127.0.0.1:7897/");
+});
+
+test("a bare * in no_proxy disables proxying wholesale", () => {
+  assert.equal(
+    resolveProxyUrl("api.anthropic.com", undefined, {
+      https_proxy: "http://127.0.0.1:7897",
+      no_proxy: "*",
+    }),
+    null,
+  );
+});
+
+test("ignores an unusable proxy value rather than throwing", () => {
+  assert.equal(
+    resolveProxyUrl("api.anthropic.com", undefined, { https_proxy: "socks5://127.0.0.1:1080" }),
+    null,
+    "CONNECT tunnelling cannot speak socks",
+  );
+  assert.equal(resolveProxyUrl("api.anthropic.com", undefined, { https_proxy: "   " }), null);
 });
