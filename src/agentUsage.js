@@ -219,7 +219,11 @@ function formatRateLimitWindow(limitWindow, now) {
   }
   const minutes = limitWindow.window_minutes;
   let label;
-  if (minutes >= 7 * 24 * 60) {
+  if (typeof limitWindow.label === "string" && limitWindow.label) {
+    // Model-scoped windows carry their own label: several share one window
+    // length, so the duration alone cannot tell them apart.
+    label = limitWindow.label;
+  } else if (minutes >= 7 * 24 * 60) {
     label = "Weekly usage";
   } else if (minutes <= 24 * 60) {
     label = `${Math.round(minutes / 60)}h usage`;
@@ -238,12 +242,15 @@ function formatRateLimitWindow(limitWindow, now) {
     : `${label}: ${percent} · Reset at ${reset}`;
 }
 
-// Convert Codex rate_limits into tooltip rows. primary is usually 5h; secondary is weekly.
+// Convert rate_limits into tooltip rows. primary is usually 5h; secondary is
+// weekly. `scoped` holds optional model-scoped windows (Claude only) and is
+// tooltip-only — the status bar keeps just the two headline percentages.
 function formatRateLimits(rateLimits, now = Date.now()) {
   if (!rateLimits) {
     return [];
   }
-  return [rateLimits.primary, rateLimits.secondary]
+  const scoped = Array.isArray(rateLimits.scoped) ? rateLimits.scoped : [];
+  return [rateLimits.primary, rateLimits.secondary, ...scoped]
     .map((limitWindow) => formatRateLimitWindow(limitWindow, now))
     .filter(Boolean);
 }

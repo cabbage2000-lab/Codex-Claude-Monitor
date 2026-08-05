@@ -144,6 +144,31 @@ test("formatRateLimits formats 5h and weekly windows with reset times", () => {
   ]);
 });
 
+// Model-scoped windows share the 7-day length with the headline weekly one, so
+// their own label is what keeps the rows apart.
+test("formatRateLimits appends scoped windows using their explicit labels", () => {
+  const now = new Date(2026, 5, 3, 12, 0).getTime();
+  const rateLimits = {
+    primary: { used_percent: 11, window_minutes: 300 },
+    secondary: { used_percent: 14, window_minutes: 10080 },
+    scoped: [
+      { used_percent: 62, window_minutes: 10080, label: "Weekly usage (Opus)" },
+      { used_percent: 3, window_minutes: 10080, label: "Weekly usage (Sonnet)" },
+    ],
+  };
+
+  assert.deepEqual(formatRateLimits(rateLimits, now), [
+    "5h usage: 11%",
+    "Weekly usage: 14%",
+    "Weekly usage (Opus): 62%",
+    "Weekly usage (Sonnet): 3%",
+  ]);
+
+  // The status bar stays at the two headline percentages; scoped rows are
+  // tooltip-only, or the segment list would grow without bound.
+  assert.deepEqual(formatRateLimitsStatusBar(rateLimits), ["$(history) 11%", "$(calendar) 14%"]);
+});
+
 // The fixture dates sit in early June / early July, away from any DST switch, so
 // the relative durations stay deterministic across time zones.
 test("formatTimeLeft renders compact countdowns and rejects past times", () => {

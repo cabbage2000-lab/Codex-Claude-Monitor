@@ -68,27 +68,104 @@ test("returns null when a present window has a non-numeric utilization", () => {
   assert.equal(mapUsageResponse({ five_hour: { utilization: "n/a" } }, 1), null);
 });
 
+// Model-scoped weekly windows share the 7-day length with `seven_day`, so each
+// carries an explicit label the tooltip uses instead of the inferred duration.
+test("collects model-scoped weekly windows with their own labels", () => {
+  const result = mapUsageResponse(
+    {
+      five_hour: { utilization: 11 },
+      seven_day: { utilization: 14 },
+      seven_day_opus: { utilization: 62, resets_at: RESET_ISO },
+      seven_day_sonnet: { utilization: 3 },
+    },
+    1,
+  );
+
+  assert.deepEqual(result.rateLimits.scoped, [
+    {
+      used_percent: 62,
+      window_minutes: 10080,
+      resets_at: RESET_UNIX,
+      label: "Weekly usage (Opus)",
+    },
+    { used_percent: 3, window_minutes: 10080, label: "Weekly usage (Sonnet)" },
+  ]);
+});
+
+// Every account that does not meter Opus separately gets null for these.
+test("omits scoped windows entirely when none carry data", () => {
+  const result = mapUsageResponse(
+    { five_hour: { utilization: 11 }, seven_day_opus: null, seven_day_sonnet: { utilization: null } },
+    1,
+  );
+  assert.equal(result.rateLimits.scoped, undefined);
+});
+
+// A headline window invalidates the read when malformed; a supplementary one is
+// only dropped, since losing it is better than losing the whole snapshot.
+test("skips a malformed scoped window without invalidating the read", () => {
+  const result = mapUsageResponse(
+    { five_hour: { utilization: 11 }, seven_day_opus: { utilization: "n/a" } },
+    1,
+  );
+  assert.equal(result.rateLimits.primary.used_percent, 11);
+  assert.equal(result.rateLimits.scoped, undefined);
+});
+
+// Reading milliseconds as seconds would make every token look expired and take
+// the whole source dark, so each accepted shape is pinned down.
+test("accepts expiresAt as milliseconds, seconds, or an ISO string", () => {
+  const nowMs = Date.parse("2026-08-05T00:00:00.000Z");
+  const future = "2026-08-06T00:00:00.000Z";
+  const past = "2026-08-04T00:00:00.000Z";
+  const token = (expiresAt) => extractAccessToken({ claudeAiOauth: { accessToken: "at", expiresAt } }, nowMs);
+
+  assert.equal(token(Date.parse(future)), "at", "future milliseconds");
+  assert.equal(token(Date.parse(past)), null, "past milliseconds");
+  assert.equal(token(Math.floor(Date.parse(future) / 1000)), "at", "future seconds");
+  assert.equal(token(Math.floor(Date.parse(past) / 1000)), null, "past seconds");
+  assert.equal(token(future), "at", "future ISO string");
+  assert.equal(token(past), null, "past ISO string");
+  assert.equal(token(String(Date.parse(future))), "at", "future numeric string");
+  assert.equal(token(String(Date.parse(past))), null, "past numeric string");
+});
+
+test("treats a missing or unparseable expiresAt as usable", () => {
+  const nowMs = Date.parse("2026-08-05T00:00:00.000Z");
+  const token = (expiresAt) => extractAccessToken({ claudeAiOauth: { accessToken: "at", expiresAt } }, nowMs);
+
+  assert.equal(token(undefined), "at");
+  assert.equal(token(null), "at");
+  assert.equal(token("whenever"), "at");
+});
+
 test("returns null when no window carries data", () => {
   assert.equal(mapUsageResponse({}, 1), null);
   assert.equal(mapUsageResponse({ seven_day: { utilization: null } }, 1), null);
   assert.equal(mapUsageResponse(null, 1), null);
 });
 
+// Timestamps here are real-magnitude on purpose: expiry is disambiguated by
+// magnitude, so toy values like 1000 would silently exercise the seconds branch.
+const NOW_MS = Date.parse("2026-08-05T00:00:00.000Z");
+const EXPIRY_FUTURE_MS = Date.parse("2026-08-05T01:00:00.000Z");
+const EXPIRY_PAST_MS = Date.parse("2026-08-04T23:00:00.000Z");
+
 test("extractAccessToken reads only the access token, never the refresh token", () => {
   const blob = {
     claudeAiOauth: {
       accessToken: "at-123",
       refreshToken: "rt-should-never-be-used",
-      expiresAt: 2000,
+      expiresAt: EXPIRY_FUTURE_MS,
     },
   };
-  assert.equal(extractAccessToken(blob, 1000), "at-123");
+  assert.equal(extractAccessToken(blob, NOW_MS), "at-123");
 });
 
 test("extractAccessToken skips an expired token instead of refreshing it", () => {
-  const blob = { claudeAiOauth: { accessToken: "at-123", expiresAt: 1000 } };
-  assert.equal(extractAccessToken(blob, 1000), null);
-  assert.equal(extractAccessToken(blob, 5000), null);
+  const blob = { claudeAiOauth: { accessToken: "at-123", expiresAt: EXPIRY_PAST_MS } };
+  assert.equal(extractAccessToken(blob, NOW_MS), null);
+  assert.equal(extractAccessToken(blob, NOW_MS + 5000), null);
 });
 
 test("extractAccessToken accepts a credential blob without an expiry", () => {

@@ -235,6 +235,21 @@ function toWindow(source, windowMinutes) {
 // readClaudeStatuslineUsage returns, so callers can treat the two sources
 // interchangeably. `capturedAt` is our own read time: the payload carries no
 // timestamp, and the value is what drives staleness hiding downstream.
+// Model-scoped weekly windows, carried alongside the two headline ones. They
+// only hold a number on plans that meter Opus separately — every other account
+// gets `null` — and they share the 7-day length with `seven_day`, so each needs
+// an explicit label or the tooltip would render several identical
+// "Weekly usage" rows.
+//
+// Only windows with a stated meaning are listed. The payload also carries keys
+// like `tangelo` and `nimbus_quill`, which are internal experiment codenames:
+// surfacing them verbatim would put noise in the tooltip under names that mean
+// nothing to a user and can be renamed without notice.
+const SCOPED_WINDOWS = [
+  { key: "seven_day_opus", label: "Weekly usage (Opus)", windowMinutes: 10080 },
+  { key: "seven_day_sonnet", label: "Weekly usage (Sonnet)", windowMinutes: 10080 },
+];
+
 function mapUsageResponse(payload, capturedAtSeconds) {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -256,21 +271,64 @@ function mapUsageResponse(payload, capturedAtSeconds) {
     return null;
   }
 
+  // Supplementary, so a malformed one is skipped rather than invalidating the
+  // read the way a broken headline window does.
+  const scoped = [];
+  for (const { key, label, windowMinutes } of SCOPED_WINDOWS) {
+    const window = toWindow(payload[key], windowMinutes);
+    if (window) {
+      scoped.push({ ...window, label });
+    }
+  }
+  if (scoped.length) {
+    rateLimits.scoped = scoped;
+  }
+
   return { rateLimits, capturedAt: capturedAtSeconds };
 }
 
 // Pull only the fields we are allowed to use out of a credentials blob.
 // `refreshToken` is intentionally not touched. Returns null unless a
 // still-valid access token is present.
+// Claude Code writes `expiresAt` as Unix milliseconds today, but the credential
+// store is not ours and the field has no stated contract. Reading milliseconds
+// as seconds (or the reverse) silently misjudges expiry by three orders of
+// magnitude — in one direction every token looks expired and the source goes
+// permanently dark, which is exactly the kind of quiet failure this module has
+// already been bitten by. So: disambiguate by magnitude the way Claude Code's
+// own credential parsers do, and accept an ISO string too.
+// Returns undefined when the value carries no usable expiry.
+function toExpiryMs(value) {
+  if (Number.isFinite(value)) {
+    // A seconds-based timestamp only reaches 1e12 in the year 33658; a
+    // milliseconds-based one passed it in 2001. Anything below is seconds.
+    return value >= 1e12 ? value : value * 1000;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+    // A numeric string is still a timestamp; Date.parse would have read a bare
+    // "1780000000000" as a year, so it is handled here rather than above.
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric >= 1e12 ? numeric : numeric * 1000;
+    }
+  }
+  return undefined;
+}
+
 function extractAccessToken(blob, nowMs) {
   const oauth = blob && blob.claudeAiOauth;
   if (!oauth || typeof oauth.accessToken !== "string" || !oauth.accessToken) {
     return null;
   }
-  // expiresAt is Unix milliseconds in Claude Code's credential store. Treat a
-  // missing value as usable and let the endpoint be the judge; treat an expired
-  // one as no data rather than refreshing it ourselves.
-  if (Number.isFinite(oauth.expiresAt) && oauth.expiresAt <= nowMs) {
+  // Treat a missing or unparseable expiry as usable and let the endpoint be the
+  // judge; treat a genuinely expired one as no data rather than refreshing it
+  // ourselves.
+  const expiresAtMs = toExpiryMs(oauth.expiresAt);
+  if (expiresAtMs !== undefined && expiresAtMs <= nowMs) {
     return null;
   }
   return oauth.accessToken;
