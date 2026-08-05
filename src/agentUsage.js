@@ -1,6 +1,30 @@
 const { readLatestUsage: readLatestCodexUsage } = require("./codexUsage");
 const { readLatestClaudeUsage } = require("./claudeUsage");
 
+// Claude rate-limit snapshots older than this are hidden instead of being shown
+// as current fact. Matches the 1-hour TTL Claude Code applies to its own
+// persisted utilization cache. Only snapshots that carry a capture time are
+// subject to this — Codex limits come from live session JSONL and never expire.
+const RATE_LIMITS_MAX_AGE_MS = 3600000;
+
+// Pick the freshest of several rate-limit snapshots, each { rateLimits, capturedAt }.
+// Used to reconcile the OAuth read with the statusline bridge: whichever observed
+// the limits most recently wins, so terminal and VS Code-only workflows both work.
+function pickFreshestRateLimitSnapshot(candidates) {
+  return (candidates || [])
+    .filter((candidate) => candidate && candidate.rateLimits)
+    .sort((a, b) => (b.capturedAt || 0) - (a.capturedAt || 0))[0] || null;
+}
+
+// True when a snapshot's capture time is older than maxAgeMs. A snapshot without
+// a capture time is never stale, keeping provider-supplied limits (Codex) as-is.
+function isRateLimitSnapshotStale(capturedAtSeconds, now, maxAgeMs = RATE_LIMITS_MAX_AGE_MS) {
+  if (!Number.isFinite(capturedAtSeconds)) {
+    return false;
+  }
+  return now - capturedAtSeconds * 1000 > maxAgeMs;
+}
+
 // Each provider returns the same shape: { provider, sessionFile, updatedAt, contextTokens,
 // contextWindow, contextPercent, ... }. Add new providers to candidates.
 function readLatestAgentUsage(options = {}) {
@@ -40,16 +64,37 @@ function formatCount(value) {
   return String(value);
 }
 
-// Friendly Claude model label, e.g. "claude-opus-4-8" -> "Opus 4.8". Returns null for unrecognized models.
+function capitalize(word) {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+// Friendly Claude model label, e.g. "claude-opus-4-8" -> "Opus 4.8",
+// "claude-opus-5[1m]" -> "Opus 5", "claude-3-5-sonnet-20241022" -> "Sonnet 3.5".
+// Returns null for unrecognized models (Codex, third-party providers).
+//
+// The version is matched as one or two digits followed by a non-digit, which is
+// what keeps a trailing release date out of the label: in "haiku-4-5-20251001"
+// the minor group can only take "5", and in the legacy "sonnet-20241022" form
+// nothing matches at all, so it falls through to the legacy pattern below.
 function formatModelName(model) {
-  const match = String(model || "")
-    .toLowerCase()
-    .match(/(opus|sonnet|haiku)-(\d+)-(\d+)/);
-  if (!match) {
-    return null;
+  const value = String(model || "").toLowerCase();
+
+  // Current ids lead with the family: claude-opus-4-8, claude-opus-5, claude-sonnet-5,
+  // claude-fable-5, claude-haiku-4-5-20251001. The minor version is optional.
+  const current = value.match(/(opus|sonnet|haiku|fable)-(\d{1,2})(?:-(\d{1,2}))?(?!\d)/);
+  if (current) {
+    const version = current[3] ? `${current[2]}.${current[3]}` : current[2];
+    return `${capitalize(current[1])} ${version}`;
   }
-  const family = match[1].charAt(0).toUpperCase() + match[1].slice(1);
-  return `${family} ${match[2]}.${match[3]}`;
+
+  // Claude 3.x ids lead with the version instead: claude-3-5-sonnet-20241022, claude-3-opus-20240229.
+  const legacy = value.match(/claude-(\d{1,2})(?:-(\d{1,2}))?-(opus|sonnet|haiku)/);
+  if (legacy) {
+    const version = legacy[2] ? `${legacy[1]}.${legacy[2]}` : legacy[1];
+    return `${capitalize(legacy[3])} ${version}`;
+  }
+
+  return null;
 }
 
 // Claude token-composition rows for the tooltip. Empty for providers without this breakdown (e.g. Codex).
@@ -253,18 +298,26 @@ function formatAgentUsage(usage, now = Date.now()) {
     lines.push(`Model: ${modelDisplay}`);
   }
   lines.push(...formatClaudeTokenDetail(usage.usage));
-  const rateLimitRows = formatRateLimits(usage.rateLimits, now);
+  // A snapshot we can no longer vouch for is dropped rather than displayed:
+  // a wrong limit percentage is worse than no limit percentage.
+  const stale = isRateLimitSnapshotStale(usage.rateLimitsCapturedAt, now);
+  const availableRateLimitRows = formatRateLimits(usage.rateLimits, now);
+  const rateLimitRows = stale ? [] : availableRateLimitRows;
   lines.push(...rateLimitRows);
-  // The capture-time row only makes sense next to statusline-sourced rate limits.
+  // The capture-time row only makes sense next to snapshot-sourced rate limits.
   if (rateLimitRows.length > 0) {
     const captureRow = formatUsageCaptureRow(usage.rateLimitsCapturedAt, now);
     if (captureRow) {
       lines.push(captureRow);
     }
+  } else if (availableRateLimitRows.length > 0) {
+    // Only say something was hidden when there really was something to hide.
+    const ago = formatTimeAgo(usage.rateLimitsCapturedAt, now);
+    lines.push(`Rate limits hidden — last snapshot ${ago} (stale)`);
   }
 
   const textParts = [`${provider} $(comment) ${contextPercent}`];
-  textParts.push(...formatRateLimitsStatusBar(usage.rateLimits));
+  textParts.push(...formatRateLimitsStatusBar(stale ? null : usage.rateLimits));
 
   return {
     text: textParts.join(" · "),
@@ -274,6 +327,7 @@ function formatAgentUsage(usage, now = Date.now()) {
 }
 
 module.exports = {
+  RATE_LIMITS_MAX_AGE_MS,
   formatAgentUsage,
   formatClaudeTokenDetail,
   formatCount,
@@ -283,5 +337,7 @@ module.exports = {
   formatTimeAgo,
   formatTimeLeft,
   getUsageSeverity,
+  isRateLimitSnapshotStale,
+  pickFreshestRateLimitSnapshot,
   readLatestAgentUsage,
 };

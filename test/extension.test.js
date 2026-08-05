@@ -4,17 +4,23 @@ const path = require("node:path");
 const test = require("node:test");
 
 const extensionPath = path.resolve(__dirname, "../src/extension.js");
+// The rate-limit source selection is exercised for real; only I/O is stubbed.
+const { pickFreshestRateLimitSnapshot } = require("../src/agentUsage");
 
 // Load extension.js with a fake `vscode`, a stubbed ./agentUsage, and a stubbed ./handoff. The
 // returned `state` lets each test inspect registered commands, copied clipboard text, and
 // notifications without touching the real VS Code API, git, or JSONL files.
-function loadExtension({ usage }) {
+// `statuslineUsage` / `oauthUsage` stand in for the two rate-limit sources, and
+// `config` overrides individual agentTokenStatus settings.
+function loadExtension({ usage, statuslineUsage = null, oauthUsage = null, config = {} }) {
   delete require.cache[extensionPath];
 
   const state = {
     commands: {},
     clipboardTexts: [],
     informationMessages: [],
+    readOptions: [],
+    oauthRefreshCalls: [],
   };
 
   const fakeVscode = {
@@ -47,8 +53,10 @@ function loadExtension({ usage }) {
     workspace: {
       getConfiguration() {
         return {
-          get(_key, defaultValue) {
-            return defaultValue;
+          get(key, defaultValue) {
+            return Object.prototype.hasOwnProperty.call(config, key)
+              ? config[key]
+              : defaultValue;
           },
         };
       },
@@ -73,7 +81,9 @@ function loadExtension({ usage }) {
           formatAgentUsage() {
             return { text: "Codex 3%", tooltip: "Codex: ctx", severity: "low" };
           },
-          readLatestAgentUsage() {
+          pickFreshestRateLimitSnapshot,
+          readLatestAgentUsage(options) {
+            state.readOptions.push(options);
             return usage;
           },
         };
@@ -86,7 +96,16 @@ function loadExtension({ usage }) {
       }
       if (request === "./claudeStatuslineUsage") {
         return {
-          readClaudeStatuslineUsage: () => null,
+          readClaudeStatuslineUsage: () => statuslineUsage,
+        };
+      }
+      if (request === "./claudeOAuthUsage") {
+        return {
+          readClaudeOAuthUsage: () => oauthUsage,
+          refreshClaudeOAuthUsage: (options) => {
+            state.oauthRefreshCalls.push(options);
+            return Promise.resolve(oauthUsage);
+          },
         };
       }
     }
@@ -144,6 +163,110 @@ test("handoff command does not trigger at the threshold, with a different messag
 
     assert.deepEqual(state.clipboardTexts, ["HANDOFF_PROMPT"]);
     assert.match(state.informationMessages[0], /below the .* threshold/i);
+  } finally {
+    restore();
+  }
+});
+
+// The OAuth read is the only rate-limit source that works when Claude Code runs
+// solely in the VS Code panel, where the status line never executes.
+test("prefers the OAuth snapshot when it is newer than the statusline bridge", () => {
+  const { state, restore } = loadExtension({
+    usage: { provider: "Claude", contextPercent: 10 },
+    statuslineUsage: {
+      rateLimits: { primary: { used_percent: 6, window_minutes: 300 } },
+      capturedAt: 1780000000,
+    },
+    oauthUsage: {
+      rateLimits: { primary: { used_percent: 42, window_minutes: 300 } },
+      capturedAt: 1780009999,
+    },
+  });
+  try {
+    const options = state.readOptions[state.readOptions.length - 1];
+    assert.equal(options.claudeRateLimits.primary.used_percent, 42);
+    assert.equal(options.claudeRateLimitsCapturedAt, 1780009999);
+  } finally {
+    restore();
+  }
+});
+
+test("keeps the statusline snapshot when it is the newer of the two", () => {
+  const { state, restore } = loadExtension({
+    usage: { provider: "Claude", contextPercent: 10 },
+    statuslineUsage: {
+      rateLimits: { primary: { used_percent: 6, window_minutes: 300 } },
+      capturedAt: 1780009999,
+    },
+    oauthUsage: {
+      rateLimits: { primary: { used_percent: 42, window_minutes: 300 } },
+      capturedAt: 1780000000,
+    },
+  });
+  try {
+    const options = state.readOptions[state.readOptions.length - 1];
+    assert.equal(options.claudeRateLimits.primary.used_percent, 6);
+    assert.equal(options.claudeRateLimitsCapturedAt, 1780009999);
+  } finally {
+    restore();
+  }
+});
+
+test("passes null rate limits when neither source has data", () => {
+  const { state, restore } = loadExtension({
+    usage: { provider: "Claude", contextPercent: 10 },
+  });
+  try {
+    const options = state.readOptions[state.readOptions.length - 1];
+    assert.equal(options.claudeRateLimits, null);
+    assert.equal(options.claudeRateLimitsCapturedAt, null);
+  } finally {
+    restore();
+  }
+});
+
+test("activation kicks off an unforced OAuth read", () => {
+  const { state, restore } = loadExtension({
+    usage: { provider: "Claude", contextPercent: 10 },
+  });
+  try {
+    assert.equal(state.oauthRefreshCalls.length, 1);
+    assert.equal(state.oauthRefreshCalls[0].force, false);
+  } finally {
+    restore();
+  }
+});
+
+test("explicit refresh forces the OAuth read past its throttle", () => {
+  const { state, restore } = loadExtension({
+    usage: { provider: "Claude", contextPercent: 10 },
+  });
+  try {
+    state.commands["agentTokenStatus.refresh"]();
+
+    const last = state.oauthRefreshCalls[state.oauthRefreshCalls.length - 1];
+    assert.equal(last.force, true);
+  } finally {
+    restore();
+  }
+});
+
+// Opting out must stop both the credential read and the use of any cached value.
+test("disabling enableClaudeOAuthUsage skips the read and ignores its snapshot", () => {
+  const { state, restore } = loadExtension({
+    usage: { provider: "Claude", contextPercent: 10 },
+    oauthUsage: {
+      rateLimits: { primary: { used_percent: 42, window_minutes: 300 } },
+      capturedAt: 1780009999,
+    },
+    config: { enableClaudeOAuthUsage: false },
+  });
+  try {
+    state.commands["agentTokenStatus.refresh"]();
+
+    assert.equal(state.oauthRefreshCalls.length, 0);
+    const options = state.readOptions[state.readOptions.length - 1];
+    assert.equal(options.claudeRateLimits, null);
   } finally {
     restore();
   }

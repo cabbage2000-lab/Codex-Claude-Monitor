@@ -32,7 +32,7 @@ Claude $(comment) 18% · $(history) 25% · $(calendar) 8%
 ```
 
 - The leading label is the active provider, followed by `$(comment)` (a speech-bubble icon marking the current session) and the context usage percentage.
-- Both providers append compact rate-limit segments using codicon icons: `$(history)` is the 5-hour window and `$(calendar)` is the weekly window. Codex reads them from its session files. For Claude they come from the statusline usage cache written by `scripts/usage-cache.sh` (see [Claude subscription limits](#claude-subscription-limits) below). Until that cache exists, the Claude segments are omitted. Icons replace letter abbreviations (`5h`/`w`) so the bar reads the same in any language.
+- Both providers append compact rate-limit segments using codicon icons: `$(history)` is the 5-hour window and `$(calendar)` is the weekly window. Codex reads them from its session files. For Claude they come from the OAuth usage endpoint or the statusline cache written by `scripts/usage-cache.sh`, whichever is fresher (see [Claude subscription limits](#claude-subscription-limits) below). Until one of them has data, the Claude segments are omitted. Icons replace letter abbreviations (`5h`/`w`) so the bar reads the same in any language.
 - The friendly model name (e.g. `Opus 4.8`) and rate-limit reset times (with a relative countdown) stay in the hover tooltip.
 - The item color reflects context-usage severity (green / yellow / red, see above).
 - Codex percentages come from `input_tokens / model_context_window` for the latest request.
@@ -113,14 +113,33 @@ Codex-Claude-Monitor: Handoff
 | `agentTokenStatus.sessionsRoot` | `~/.codex/sessions` | Optional absolute path to the Codex sessions directory. Leave empty to use the default. |
 | `agentTokenStatus.claudeRoot` | `~/.claude` | Optional absolute path to the Claude Code home directory. Leave empty to use the default. |
 | `agentTokenStatus.refreshIntervalMs` | `10000` | How often (in milliseconds, minimum `1000`) to re-read usage from local session files. |
+| `agentTokenStatus.enableClaudeOAuthUsage` | `true` | Read Claude subscription limits from the OAuth usage endpoint, which also works when Claude Code runs only in the VS Code panel. Pro/Max only — see below. |
 
 Changing any of these settings refreshes the status bar and restarts the refresh timer immediately.
 
 ## Claude subscription limits
 
-The Claude 5-hour and weekly rate-limit segments come from Claude Code's **status line** input, not from any CLI probe. Claude Code passes a JSON blob (including a `rate_limits` block for subscribers) on stdin to the configured status line command; the bundled helper `scripts/usage-cache.sh` snapshots that block to `~/.claude/.usage-cache.json`, and the extension reads it on each refresh.
+The Claude 5-hour and weekly rate-limit segments have **two possible sources**, and the extension uses whichever observed the limits most recently.
 
-To enable the segments, pipe your status line input through the helper. If you have no status line yet, set one in `~/.claude/settings.json`:
+### Source 1: the OAuth usage endpoint (works everywhere)
+
+The extension reads `GET /api/oauth/usage` directly — the same call the official Claude Code VS Code extension makes for its own usage panel. It reuses the access token Claude Code already stored (macOS Keychain, or `~/.claude/.credentials.json` elsewhere).
+
+This is the only source that works when you use Claude Code **exclusively through the VS Code panel**, because the status line below is part of Claude Code's terminal UI and never executes in panel mode.
+
+Boundaries worth knowing:
+
+- Only the **access token** is read. The refresh token is never touched — refresh tokens usually rotate, so refreshing it could sign Claude Code out. An expired access token is skipped until Claude Code refreshes it on its own.
+- Requests are throttled to at most one per 5 minutes (matching Claude Code's own throttle); clicking the status bar relaxes that to 30 seconds.
+- On macOS the first read may raise a Keychain authorization prompt, since the credential item is scoped to the `claude` binary.
+- **Pro/Max subscriptions only.** The endpoint answers `403 forbidden` for `team` and `enterprise` accounts (Claude Code gates the same call client-side, which is why its own `/usage` shows no limit rows on those plans). On a 403 the extension stops asking and relies on the status line bridge.
+- Set `agentTokenStatus.enableClaudeOAuthUsage` to `false` to skip the credential read entirely.
+
+### Source 2: the status line bridge (terminal sessions)
+
+Claude Code passes a JSON blob (including a `rate_limits` block for subscribers) on stdin to the configured status line command; the bundled helper `scripts/usage-cache.sh` snapshots that block to `~/.claude/.usage-cache.json`, and the extension reads it on each refresh. This costs nothing and works on every plan, but only updates while a **terminal** Claude Code session is rendering its status line.
+
+To enable it, pipe your status line input through the helper. If you have no status line yet, set one in `~/.claude/settings.json`:
 
 ```json
 {
@@ -143,9 +162,13 @@ HELPER="$HOME/.vscode/extensions/codex-claude-monitor/scripts/usage-cache.sh"
 
 Notes:
 
-- The `rate_limits` block is only present for Claude.ai subscribers, and only after the first API response of a session — so the segments appear once you have sent at least one message.
-- The cache updates only while a Claude Code session is running its status line. The tooltip shows a `Usage updated …` line so you can see how fresh the numbers are.
+- The `rate_limits` block is only present for Claude.ai subscribers, and only after the first API response of a session — so the segments appear once you have sent at least one message. It carries the 5-hour and weekly windows only.
+- The cache updates only while a **terminal** Claude Code session is running its status line. The tooltip shows a `Usage updated …` line so you can see how fresh the numbers are.
 - The helper never fails your status line: a missing `jq`, absent `rate_limits`, or unwritable directory just skips the snapshot.
+
+### Staleness
+
+A rate-limit snapshot older than **1 hour** (the same TTL Claude Code applies to its own cached utilization) is hidden rather than displayed: the segments disappear from the status bar and the tooltip says `Rate limits hidden — last snapshot 4h ago (stale)`. A wrong percentage is worse than no percentage. Codex limits come from live session files, carry no capture time, and are never hidden.
 
 ## How It Works
 

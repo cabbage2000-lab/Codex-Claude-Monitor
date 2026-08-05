@@ -1,15 +1,25 @@
 const vscode = require("vscode");
 const {
   formatAgentUsage,
+  pickFreshestRateLimitSnapshot,
   readLatestAgentUsage,
 } = require("./agentUsage");
 const { buildHandoffPrompt, collectGitInfo } = require("./handoff");
 const { getDefaultSessionsRoot } = require("./codexUsage");
 const { getDefaultClaudeRoot } = require("./claudeUsage");
 const { readClaudeStatuslineUsage } = require("./claudeStatuslineUsage");
+const {
+  readClaudeOAuthUsage,
+  refreshClaudeOAuthUsage,
+} = require("./claudeOAuthUsage");
 
 // Settings that should trigger a refresh when changed, without the agentTokenStatus prefix.
-const WATCHED_SETTINGS = ["sessionsRoot", "claudeRoot", "refreshIntervalMs"];
+const WATCHED_SETTINGS = [
+  "sessionsRoot",
+  "claudeRoot",
+  "refreshIntervalMs",
+  "enableClaudeOAuthUsage",
+];
 
 // Usage severity to status bar theme color. Theme colors adapt to light and dark themes.
 const SEVERITY_COLORS = {
@@ -46,18 +56,51 @@ function getWorkspaceFolders() {
     .filter(Boolean);
 }
 
+function isClaudeOAuthUsageEnabled() {
+  return vscode.workspace
+    .getConfiguration("agentTokenStatus")
+    .get("enableClaudeOAuthUsage", true);
+}
+
 function readUsage() {
   const claudeRoot = getConfiguredPath("claudeRoot", getDefaultClaudeRoot);
-  // Claude subscription limits come from the statusline usage cache (see
-  // scripts/usage-cache.sh). Missing cache degrades to context-only display.
-  const statuslineUsage = readClaudeStatuslineUsage(claudeRoot);
+  // Claude subscription limits have two possible sources. The OAuth read works in
+  // every mode, including the VS Code panel where the statusline never runs; the
+  // statusline bridge (scripts/usage-cache.sh) costs nothing when a terminal
+  // session is active. Take whichever observed the limits most recently. With
+  // neither available the display degrades to context-only.
+  const snapshot = pickFreshestRateLimitSnapshot([
+    isClaudeOAuthUsageEnabled() ? readClaudeOAuthUsage() : null,
+    readClaudeStatuslineUsage(claudeRoot),
+  ]);
   return readLatestAgentUsage({
     codexSessionsRoot: getConfiguredPath("sessionsRoot", getDefaultSessionsRoot),
     claudeRoot,
     workspaceFolders: getWorkspaceFolders(),
-    claudeRateLimits: statuslineUsage ? statuslineUsage.rateLimits : null,
-    claudeRateLimitsCapturedAt: statuslineUsage ? statuslineUsage.capturedAt : null,
+    claudeRateLimits: snapshot ? snapshot.rateLimits : null,
+    claudeRateLimitsCapturedAt: snapshot ? snapshot.capturedAt : null,
   });
+}
+
+// Kick off the background OAuth usage read. Throttled inside the module, never
+// throws, and repaints only when it actually produced a snapshot — so the status
+// bar stays synchronous and a slow or failing network never blocks a render.
+function scheduleClaudeOAuthUsageRefresh(force) {
+  if (!isClaudeOAuthUsageEnabled()) {
+    return;
+  }
+  refreshClaudeOAuthUsage({
+    claudeRoot: getConfiguredPath("claudeRoot", getDefaultClaudeRoot),
+    force,
+  })
+    .then((snapshot) => {
+      if (snapshot && statusItem) {
+        renderStatus();
+      }
+    })
+    .catch(() => {
+      // Already swallowed inside the module; nothing actionable here.
+    });
 }
 
 // Handoff is offered only when context usage is strictly above the threshold, so the suffix stays
@@ -70,7 +113,10 @@ function shouldOfferHandoff(usage) {
   );
 }
 
-function refreshStatus() {
+// Paint the status bar from locally available data only. Split out from
+// refreshStatus so the background OAuth read can repaint without re-triggering
+// itself.
+function renderStatus() {
   if (!statusItem) {
     return null;
   }
@@ -109,9 +155,16 @@ function refreshStatus() {
   }
 }
 
+// Full refresh: repaint from local files and kick the background OAuth read.
+// `force` (an explicit user refresh) relaxes the read throttle to its floor.
+function refreshStatus(options = {}) {
+  scheduleClaudeOAuthUsageRefresh(Boolean(options.force));
+  return renderStatus();
+}
+
 function startRefreshTimer() {
   clearInterval(refreshTimer);
-  refreshTimer = setInterval(refreshStatus, getRefreshIntervalMs());
+  refreshTimer = setInterval(() => refreshStatus(), getRefreshIntervalMs());
 }
 
 // Build the handoff prompt from the freshest usage available. Falls back to a fresh read when the
@@ -145,7 +198,8 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("agentTokenStatus.refresh", () => {
-      refreshStatus();
+      // An explicit click should actually re-read the limits, not just repaint.
+      refreshStatus({ force: true });
     }),
   );
 
@@ -182,6 +236,10 @@ function activate(context) {
 
 function deactivate() {
   clearInterval(refreshTimer);
+  // Clearing these makes an in-flight OAuth read's repaint a no-op instead of
+  // touching disposed status bar items.
+  statusItem = undefined;
+  handoffItem = undefined;
 }
 
 module.exports = {
